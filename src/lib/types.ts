@@ -49,6 +49,8 @@ export type Task = {
   dueDate: string | null;
   status: TaskStatus;
   closedAt: string | null;
+  longTerm: boolean;
+  flagAfterDays: number | null;
   createdAt: string;
   updatedAt: string;
 };

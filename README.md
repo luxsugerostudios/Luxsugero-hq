@@ -168,12 +168,14 @@ Public read, founder write.
   "dueDate": null,
   "status": "open",
   "closedAt": null,
+  "longTerm": false,
+  "flagAfterDays": null,
   "createdAt": "2026-11-10T04:30:00.000Z",
   "updatedAt": "2026-11-10T04:30:00.000Z"
 }
 ```
 
-`status` is `open` or `done`. `closedAt` is set when a task is marked done. Overdue means open and `givenDate` is more than 3 calendar days before today in Asia/Kolkata. Carried means open and the given date is before today.
+`status` is `open` or `done`. `closedAt` is set when a task is marked done. `longTerm` and `flagAfterDays` are optional. Overdue means the task is open and the Asia/Kolkata calendar days since `givenDate` are greater than `flagAfterDays` when that number is set, otherwise 3. A long-term task (`longTerm: true`, usually `flagAfterDays: 7`) shows a Long-term badge. Carried means open and the given date is before today.
 
 ### `agents/{id}`
 

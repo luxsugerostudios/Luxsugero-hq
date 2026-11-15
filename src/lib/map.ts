@@ -83,9 +83,16 @@ export function mapTask(id: string, raw: unknown): Task | null {
     dueDate: raw.dueDate == null ? null : dateOnly(raw.dueDate),
     status,
     closedAt: raw.closedAt == null ? null : stamp(raw.closedAt),
+    longTerm: raw.longTerm === true,
+    flagAfterDays: flagAfterDays(raw.flagAfterDays),
     createdAt: stamp(raw.createdAt) ?? "",
     updatedAt: stamp(raw.updatedAt) ?? "",
   };
+}
+
+function flagAfterDays(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) return null;
+  return value;
 }
 
 export function mapAgent(id: string, raw: unknown): Agent | null {

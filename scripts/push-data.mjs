@@ -129,6 +129,22 @@ function idField(pattern, label) {
   };
 }
 
+function boolField(value, where, errors) {
+  if (typeof value !== "boolean") {
+    errors.push(`${where} must be a boolean`);
+    return undefined;
+  }
+  return value;
+}
+
+function flagAfterDaysField(value, where, errors) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 3650) {
+    errors.push(`${where} must be a non-negative whole number`);
+    return undefined;
+  }
+  return value;
+}
+
 function orderField(value, where, errors) {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 999) {
     errors.push(`${where} must be an integer from 0 to 999`);
@@ -227,6 +243,8 @@ const TASKS = {
   dueDate: nullOr(dateField),
   status: enumField(["open", "done"]),
   closedAt: nullOr(stampField),
+  longTerm: boolField,
+  flagAfterDays: nullOr(flagAfterDaysField),
   createdAt: stampField,
   updatedAt: stampField,
 };

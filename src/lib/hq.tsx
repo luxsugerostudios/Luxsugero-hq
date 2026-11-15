@@ -301,6 +301,8 @@ export function HqProvider({ children }: { children: ReactNode }) {
             dueDate: task.dueDate,
             status: task.status,
             closedAt: task.closedAt,
+            longTerm: task.longTerm,
+            flagAfterDays: task.flagAfterDays,
             createdAt: task.createdAt,
             updatedAt: task.updatedAt,
           })

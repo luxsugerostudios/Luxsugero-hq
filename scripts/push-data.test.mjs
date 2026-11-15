@@ -76,6 +76,35 @@ test("public text rejects emails and prices", () => {
   assert.ok(priced.errors.length > 0);
 });
 
+test("tasks accept longTerm and flagAfterDays", () => {
+  const ok = buildPlan({
+    tasks: [
+      {
+        id: "task-long",
+        title: "Keep the land file warm",
+        longTerm: true,
+        flagAfterDays: 7,
+      },
+    ],
+  });
+  assert.deepEqual(ok.errors, []);
+  assert.equal(ok.ops[0].data.longTerm, true);
+  assert.equal(ok.ops[0].data.flagAfterDays, 7);
+
+  const cleared = buildPlan({
+    tasks: [{ id: "task-long", longTerm: false, flagAfterDays: null }],
+  });
+  assert.deepEqual(cleared.errors, []);
+  assert.equal(cleared.ops[0].data.longTerm, false);
+  assert.equal(cleared.ops[0].data.flagAfterDays, null);
+
+  const bad = buildPlan({
+    tasks: [{ id: "task-long", flagAfterDays: "7", longTerm: "yes" }],
+  });
+  assert.ok(bad.errors.some((error) => error.includes("flagAfterDays")));
+  assert.ok(bad.errors.some((error) => error.includes("longTerm")));
+});
+
 test("delete is explicit and partial updates stay small", () => {
   const { errors, ops } = buildPlan({
     tasks: [{ id: "task-gmail-slack", _delete: true }],

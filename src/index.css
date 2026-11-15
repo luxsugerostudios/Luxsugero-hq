@@ -278,6 +278,28 @@ h2 {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+.long-term {
+  display: inline-block;
+  margin-top: 0.3rem;
+  padding: 0.08rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--brass);
+  color: var(--brass);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+}
+label.check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  grid-column: 1 / -1;
+}
+label.check input {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0;
+}
 .flag {
   font-size: 0.72rem;
   font-weight: 700;

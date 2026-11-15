@@ -11,7 +11,9 @@ export function TasksPanel() {
   const people = [...data.people].sort((a, b) => a.order - b.order);
   const known = new Set(people.map((person) => person.id));
   const open = data.tasks.filter((task) => task.status === "open");
-  const overdue = open.filter((task) => isOverdue(task.status, task.givenDate, today));
+  const overdue = open.filter((task) =>
+    isOverdue(task.status, task.givenDate, today, task.flagAfterDays),
+  );
   const closed = data.tasks.filter((task) =>
     closedThisWeek(task.status, task.closedAt, today),
   );
@@ -101,6 +103,33 @@ function Stat({
   );
 }
 
+const LONG_TERM_DAYS = 7;
+
+function longTermFields(checked: boolean): { longTerm: boolean; flagAfterDays: number | null } {
+  return checked
+    ? { longTerm: true, flagAfterDays: LONG_TERM_DAYS }
+    : { longTerm: false, flagAfterDays: null };
+}
+
+function LongTermField({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="check">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      Long-term (flag after 7 days)
+    </label>
+  );
+}
+
 function FilterChip({
   pressed,
   onClick,
@@ -131,6 +160,7 @@ function TaskForm({
   const [ownerId, setOwnerId] = useState("unassigned");
   const [givenDate, setGivenDate] = useState(today);
   const [dueDate, setDueDate] = useState("");
+  const [longTerm, setLongTerm] = useState(false);
 
   return (
     <form
@@ -146,11 +176,15 @@ function TaskForm({
           dueDate: dueDate || null,
           status: "open",
           closedAt: null,
+          ...longTermFields(longTerm),
           createdAt: now,
           updatedAt: now,
         };
         void onCreate(task)
-          .then(() => setTitle(""))
+          .then(() => {
+            setTitle("");
+            setLongTerm(false);
+          })
           .catch(() => undefined);
       }}
     >
@@ -186,6 +220,7 @@ function TaskForm({
         Due
         <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
       </label>
+      <LongTermField checked={longTerm} onChange={setLongTerm} />
       <button type="submit" className="primary" disabled={busy}>
         Add task
       </button>
@@ -257,8 +292,9 @@ function TaskCard({
   const [title, setTitle] = useState(task.title);
   const [givenDate, setGivenDate] = useState(task.givenDate);
   const [dueDate, setDueDate] = useState(task.dueDate ?? "");
+  const [longTerm, setLongTerm] = useState(task.longTerm);
   const age = daysOpen(task.givenDate, today);
-  const overdue = isOverdue(task.status, task.givenDate, today);
+  const overdue = isOverdue(task.status, task.givenDate, today, task.flagAfterDays);
   const carried = isCarriedForward(task.status, task.givenDate, today);
 
   const save = (next: Task) => onSave({ ...next, updatedAt: new Date().toISOString() });
@@ -270,7 +306,13 @@ function TaskCard({
           className="stack"
           onSubmit={(event) => {
             event.preventDefault();
-            void save({ ...task, title: title.trim(), givenDate, dueDate: dueDate || null })
+            void save({
+              ...task,
+              title: title.trim(),
+              givenDate,
+              dueDate: dueDate || null,
+              ...longTermFields(longTerm),
+            })
               .then(() => setEditing(false))
               .catch(() => undefined);
           }}
@@ -292,6 +334,7 @@ function TaskCard({
             Due
             <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
           </label>
+          <LongTermField checked={longTerm} onChange={setLongTerm} />
           <div className="row">
             <button type="submit" className="primary">
               Save
@@ -305,6 +348,7 @@ function TaskCard({
         <>
           <div>
             <h4>{task.title}</h4>
+            {task.longTerm ? <span className="long-term">Long-term</span> : null}
             <p className="meta">Given {formatDay(task.givenDate)}</p>
             {task.dueDate ? <p className="meta">Due {formatDay(task.dueDate)}</p> : null}
             {task.status === "done" && task.closedAt ? (
