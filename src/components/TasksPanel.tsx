@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { closedThisWeek, daysOpen, formatDay, isOverdue, kolkataDay } from "../lib/dates";
 import { useHqContext } from "../lib/hq";
 import type { BrandId, Person, Task, TaskHistory } from "../lib/types";
@@ -18,7 +18,7 @@ export function actorName(personId: string, people: Person[]): string {
   return people.find((person) => person.id === personId)?.name ?? personId;
 }
 
-export function TasksPanel() {
+export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
   const hq = useHqContext();
   const today = kolkataDay();
   const people = [...hq.data.people].sort((a, b) => a.order - b.order);
@@ -55,18 +55,36 @@ export function TasksPanel() {
   const shownPeople =
     personFilter === "all" ? people : people.filter((person) => person.id === personFilter);
 
+  if (mode === "mine") {
+    const linked = hq.personId && hq.personId !== "founder" && hq.personId !== "admin";
+    return (
+      <section aria-labelledby="mine-heading">
+        <div className="section-head">
+          <h2 id="mine-heading">My tasks</h2>
+        </div>
+        {hq.access === "signed-out" || hq.access === "pending" ? (
+          <p className="empty">Sign in to see tasks assigned to you.</p>
+        ) : null}
+        {hq.access === "guest" ? (
+          <p className="empty">Ask the founder to add your email.</p>
+        ) : null}
+        {hq.isAdmin && !linked ? (
+          <p className="empty">This account is not linked to a person. Assign work from the team board.</p>
+        ) : null}
+        {linked ? <MyTasks tasks={mine} today={today} people={people} history={hq.data.history} /> : null}
+      </section>
+    );
+  }
+
   return (
     <section aria-labelledby="tasks-heading">
       <div className="section-head">
-        <h2 id="tasks-heading">Team tasks</h2>
+        <h2 id="tasks-heading">Team board</h2>
       </div>
       {hq.access === "guest" && hq.phase === "live" ? (
         <p className="banner" role="status">
-          Ask the founder to add your email
+          Ask the founder to add your email.
         </p>
-      ) : null}
-      {hq.isMember ? (
-        <MyTasks tasks={mine} today={today} people={people} history={hq.data.history} />
       ) : null}
       {hq.isAdmin ? <AssignForm people={people} /> : null}
       <div className="toolbar filters">
@@ -155,7 +173,6 @@ function MyTasks({
 }) {
   return (
     <section className="my-tasks">
-      <h3>My tasks</h3>
       {tasks.length === 0 ? <p className="empty">Nothing assigned to you.</p> : null}
       <div className="stack">
         {tasks.map((task) => (
@@ -342,15 +359,39 @@ function TaskCard({
   history: TaskHistory[];
   emphasis?: boolean;
 }) {
-  const { isAdmin, isMember, personId, setTaskStatus, setTaskNote, deleteTask } = useHqContext();
+  const { isAdmin, isMember, personId, setTaskStatus, setTaskNote, deleteTask, saveTask } = useHqContext();
   const [note, setNote] = useState(task.note);
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(task.title);
+  const [dueDate, setDueDate] = useState(task.dueDate ?? "");
+  const [localStatus, setLocalStatus] = useState<Task["status"] | null>(null);
+  const [saved, setSaved] = useState(false);
   const mine = Boolean(personId && task.ownerId === personId);
   const canTick = isAdmin || (isMember && mine);
+  const status = localStatus ?? task.status;
   const age = daysOpen(task.givenDate, today);
-  const overdue = isOverdue(task.status, task.givenDate, today, task.flagAfterDays);
+  const overdue = status === "open" && isOverdue("open", task.givenDate, today, task.flagAfterDays);
+  useEffect(() => {
+    setLocalStatus(null);
+    setNote(task.note);
+    setTitle(task.title);
+    setDueDate(task.dueDate ?? "");
+  }, [task.status, task.note, task.title, task.dueDate, task.updatedAt]);
+
+  async function tick(next: Task["status"]) {
+    setLocalStatus(next);
+    setSaved(false);
+    try {
+      await setTaskStatus(task, next);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 1200);
+    } catch {
+      setLocalStatus(null);
+    }
+  }
   return (
     <article
-      className={`task${overdue ? " is-overdue" : ""}${task.status === "done" ? " is-done" : ""}${emphasis ? " is-emphasis" : ""}`}
+      className={`task${overdue ? " is-overdue" : ""}${status === "done" ? " is-done" : ""}${emphasis ? " is-emphasis" : ""}`}
       draggable={isAdmin}
       onDragStart={(event) => {
         if (!isAdmin) return;
@@ -359,7 +400,35 @@ function TaskCard({
       }}
     >
       <div>
-        <h4>{task.title}</h4>
+        {editing ? (
+          <form
+            className="stack"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveTask(
+                { ...task, title: title.trim(), dueDate: dueDate || null, updatedAt: new Date().toISOString() },
+                "Edited the task",
+              )
+                .then(() => setEditing(false))
+                .catch(() => undefined);
+            }}
+          >
+            <label>
+              Title
+              <input value={title} onChange={(event) => setTitle(event.target.value)} required />
+            </label>
+            <label>
+              Due
+              <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+            </label>
+            <div className="row">
+              <button type="submit" className="primary">Save</button>
+              <button type="button" className="ghost" onClick={() => setEditing(false)}>Cancel</button>
+            </div>
+          </form>
+        ) : (
+          <h4>{task.title}</h4>
+        )}
         {task.longTerm ? <span className="long-term">Long-term</span> : null}
         <p className="meta">
           Given {formatDay(task.givenDate)}
@@ -368,7 +437,7 @@ function TaskCard({
         </p>
         {task.note ? <p className="focus">{task.note}</p> : null}
       </div>
-      {task.status === "open" ? (
+      {status === "open" ? (
         <p className="age">
           <b>{age}</b>
           <span>{age === 1 ? "day open" : "days open"}</span>
@@ -379,15 +448,16 @@ function TaskCard({
       )}
       {canTick ? (
         <div className="row">
-          {task.status === "open" ? (
-            <button type="button" className="tick" onClick={() => void setTaskStatus(task, "done").catch(() => undefined)}>
+          {status === "open" ? (
+            <button type="button" className="tick" onClick={() => void tick("done")}>
               Done
             </button>
           ) : (
-            <button type="button" className="tick ghost" onClick={() => void setTaskStatus(task, "open").catch(() => undefined)}>
+            <button type="button" className="tick ghost" onClick={() => void tick("open")}>
               Undo
             </button>
           )}
+          {saved ? <span className="saved" role="status">Saved</span> : null}
         </div>
       ) : null}
       {canTick ? (
@@ -408,15 +478,22 @@ function TaskCard({
         </form>
       ) : null}
       {isAdmin ? (
-        <button
-          type="button"
-          className="warn"
-          onClick={() => {
-            if (window.confirm(`Delete “${task.title}”?`)) void deleteTask(task.id);
-          }}
-        >
-          Delete
-        </button>
+        <div className="row">
+          {!editing ? (
+            <button type="button" className="ghost" onClick={() => setEditing(true)}>
+              Edit
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="warn"
+            onClick={() => {
+              if (window.confirm(`Delete “${task.title}”?`)) void deleteTask(task.id);
+            }}
+          >
+            Delete
+          </button>
+        </div>
       ) : null}
       <details>
         <summary>History</summary>

@@ -54,6 +54,14 @@ import { EMPTY_DASHBOARD } from "./types";
 
 export type Access = "signed-out" | "pending" | "guest" | "member" | "admin";
 
+function readPreviewRole(): { access: "admin" | "member"; personId: string } | null {
+  if (!import.meta.env.DEV || typeof window === "undefined") return null;
+  const value = new URLSearchParams(window.location.search).get("as");
+  if (value === "admin") return { access: "admin", personId: "founder" };
+  if (value === "member") return { access: "member", personId: "hari-om" };
+  return null;
+}
+
 export type Phase = "unconfigured" | "connecting" | "live" | "denied" | "unreachable";
 
 const CONNECT_MS = 8000;
@@ -174,9 +182,14 @@ export function HqProvider({ children }: { children: ReactNode }) {
   } else {
     access = "guest";
   }
+  const preview = readPreviewRole();
+  if (preview) {
+    access = preview.access;
+    personId = preview.personId;
+  }
   const canEdit = founderAccount && phase === "live";
-  const isAdmin = access === "admin" && phase === "live";
-  const isMember = access === "member" && phase === "live";
+  const isAdmin = (access === "admin" && phase === "live") || preview?.access === "admin";
+  const isMember = (access === "member" && phase === "live") || preview?.access === "member";
   const viewOnly = access === "guest";
 
   useEffect(() => {

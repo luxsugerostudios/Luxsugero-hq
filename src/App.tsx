@@ -1,27 +1,26 @@
 import { useEffect, useState } from "react";
 import { AgentsPanel } from "./components/AgentsPanel";
-import { BrandsPanel } from "./components/BrandsPanel";
-import { bannerCopy, Header } from "./components/Header";
+import { Header, bannerCopy } from "./components/Header";
 import { InboxPanel } from "./components/InboxPanel";
-import { InsightsPanel } from "./components/InsightsPanel";
+import { OverviewPanel } from "./components/OverviewPanel";
 import { PipelinePanel } from "./components/PipelinePanel";
 import { TasksPanel } from "./components/TasksPanel";
-import { HqProvider, useHqContext, type Phase } from "./lib/hq";
+import { HqProvider, useHqContext } from "./lib/hq";
 
-const TABS = [
-  { id: "tasks", label: "Tasks" },
+const NAV = [
+  { id: "overview", label: "Overview" },
+  { id: "mine", label: "My tasks" },
+  { id: "board", label: "Team board" },
   { id: "inbox", label: "Main bucket" },
-  { id: "insights", label: "Insights" },
-  { id: "agents", label: "Agents" },
   { id: "pipeline", label: "Pipeline" },
-  { id: "brands", label: "Brands" },
+  { id: "agents", label: "Agents" },
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"];
+type NavId = (typeof NAV)[number]["id"];
 
-function tabFromHash(): TabId {
+function navFromHash(): NavId {
   const hash = window.location.hash.replace("#", "");
-  return TABS.some((tab) => tab.id === hash) ? (hash as TabId) : "tasks";
+  return NAV.some((item) => item.id === hash) ? (hash as NavId) : "overview";
 }
 
 export function App() {
@@ -34,7 +33,7 @@ export function App() {
 
 function Shell() {
   const hq = useHqContext();
-  const [tab, setTab] = useState<TabId>(tabFromHash);
+  const [nav, setNav] = useState<NavId>(navFromHash);
   const [theme, setTheme] = useState<"light" | "dark">(() =>
     document.documentElement.dataset.theme === "dark" ? "dark" : "light",
   );
@@ -49,78 +48,57 @@ function Shell() {
   }, [theme]);
 
   useEffect(() => {
-    const onHash = () => setTab(tabFromHash());
+    const onHash = () => setNav(navFromHash());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
   const banner = bannerCopy(hq.phase);
-  const mode =
-    hq.phase !== "live"
-      ? "Seed data · read only"
-      : hq.access === "admin"
-        ? "Admin"
-        : hq.access === "member"
-          ? "My tasks"
-          : hq.access === "guest"
-            ? "Ask the founder to add your email"
-            : "Public view";
+  const loading = hq.configured && hq.phase === "connecting";
+
+  function select(id: NavId) {
+    setNav(id);
+    history.replaceState(null, "", `#${id}`);
+  }
 
   return (
     <div className="app">
-      <a className="skip" href="#main">
-        Skip to content
-      </a>
-      <Header
-        theme={theme}
-        onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
-      />
-      {banner ? (
-        <p className="banner" role="status">
-          {banner}
-        </p>
-      ) : null}
-      {hq.actionError ? (
-        <p className="banner error" role="alert">
-          {hq.actionError}{" "}
-          <button type="button" className="ghost" onClick={hq.clearActionError}>
-            Dismiss
-          </button>
-        </p>
-      ) : null}
-      <div className="tabs" role="tablist" aria-label="Sections">
-        {TABS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            id={`tab-${item.id}`}
-            aria-selected={tab === item.id}
-            aria-controls="main"
-            className={tab === item.id ? "is-on" : ""}
-            onClick={() => {
-              setTab(item.id);
-              history.replaceState(null, "", `#${item.id}`);
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
+      <a className="skip" href="#main">Skip to content</a>
+      <header className="topbar">
+        <p className="brand"><span>Luxsugero</span> HQ</p>
+        <Header theme={theme} onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))} />
+      </header>
+      <div className="frame">
+        <nav className="sidenav" aria-label="Sections">
+          {NAV.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={nav === item.id ? "is-on" : ""}
+              aria-current={nav === item.id ? "page" : undefined}
+              onClick={() => select(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <main id="main" className="content">
+          {banner ? <p className="banner" role="status">{banner}</p> : null}
+          {hq.actionError ? (
+            <p className="banner error" role="alert">
+              {hq.actionError}{" "}
+              <button type="button" className="ghost" onClick={hq.clearActionError}>Dismiss</button>
+            </p>
+          ) : null}
+          {loading ? <p className="empty">Loading…</p> : null}
+          {!loading && nav === "overview" ? <OverviewPanel /> : null}
+          {!loading && nav === "mine" ? <TasksPanel mode="mine" /> : null}
+          {!loading && nav === "board" ? <TasksPanel mode="board" /> : null}
+          {!loading && nav === "inbox" ? <InboxPanel /> : null}
+          {!loading && nav === "pipeline" ? <PipelinePanel /> : null}
+          {!loading && nav === "agents" ? <AgentsPanel /> : null}
+        </main>
       </div>
-      <main id="main" role="tabpanel" aria-labelledby={`tab-${tab}`}>
-        {tab === "tasks" ? <TasksPanel /> : null}
-        {tab === "inbox" ? <InboxPanel /> : null}
-        {tab === "insights" ? <InsightsPanel /> : null}
-        {tab === "agents" ? <AgentsPanel /> : null}
-        {tab === "pipeline" ? <PipelinePanel /> : null}
-        {tab === "brands" ? <BrandsPanel /> : null}
-      </main>
-      <footer>
-        <span>Luxsugero · New Delhi</span>
-        <span>{mode}</span>
-      </footer>
     </div>
   );
 }
-
-export type { Phase };
