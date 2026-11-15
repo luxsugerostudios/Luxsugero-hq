@@ -7,8 +7,7 @@ export function Header({
   theme: "light" | "dark";
   onToggleTheme: () => void;
 }) {
-  const { configured, user, canEdit, viewOnly, founderAccount, signIn, signOutUser } =
-    useHqContext();
+  const { configured, user, access, signIn, signOutUser } = useHqContext();
 
   return (
     <header className="top">
@@ -24,10 +23,10 @@ export function Header({
         </button>
         {user ? (
           <>
-            {viewOnly ? <span className="badge view">View only</span> : null}
-            {canEdit ? <span className="badge edit">Editing</span> : null}
-            {founderAccount && !canEdit ? (
-              <span className="badge view">Signed in</span>
+            {access === "admin" ? <span className="badge edit">Admin</span> : null}
+            {access === "member" ? <span className="badge edit">My tasks</span> : null}
+            {access === "guest" ? (
+              <span className="badge view">Ask the founder to add your email</span>
             ) : null}
             <span className="who">{user.email}</span>
             <button type="button" className="ghost" onClick={() => void signOutUser()}>

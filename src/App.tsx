@@ -2,12 +2,16 @@ import { useEffect, useState } from "react";
 import { AgentsPanel } from "./components/AgentsPanel";
 import { BrandsPanel } from "./components/BrandsPanel";
 import { bannerCopy, Header } from "./components/Header";
+import { InboxPanel } from "./components/InboxPanel";
+import { InsightsPanel } from "./components/InsightsPanel";
 import { PipelinePanel } from "./components/PipelinePanel";
 import { TasksPanel } from "./components/TasksPanel";
 import { HqProvider, useHqContext, type Phase } from "./lib/hq";
 
 const TABS = [
   { id: "tasks", label: "Tasks" },
+  { id: "inbox", label: "Main bucket" },
+  { id: "insights", label: "Insights" },
   { id: "agents", label: "Agents" },
   { id: "pipeline", label: "Pipeline" },
   { id: "brands", label: "Brands" },
@@ -52,13 +56,15 @@ function Shell() {
 
   const banner = bannerCopy(hq.phase);
   const mode =
-    hq.phase === "live"
-      ? hq.canEdit
-        ? "Editing"
-        : hq.viewOnly
-          ? "View only"
-          : "Public view"
-      : "Seed data · read only";
+    hq.phase !== "live"
+      ? "Seed data · read only"
+      : hq.access === "admin"
+        ? "Admin"
+        : hq.access === "member"
+          ? "My tasks"
+          : hq.access === "guest"
+            ? "Ask the founder to add your email"
+            : "Public view";
 
   return (
     <div className="app">
@@ -103,6 +109,8 @@ function Shell() {
       </div>
       <main id="main" role="tabpanel" aria-labelledby={`tab-${tab}`}>
         {tab === "tasks" ? <TasksPanel /> : null}
+        {tab === "inbox" ? <InboxPanel /> : null}
+        {tab === "insights" ? <InsightsPanel /> : null}
         {tab === "agents" ? <AgentsPanel /> : null}
         {tab === "pipeline" ? <PipelinePanel /> : null}
         {tab === "brands" ? <BrandsPanel /> : null}

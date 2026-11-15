@@ -16,11 +16,14 @@ import {
   type Directive,
   type DirectiveStatus,
   type Headline,
+  type InboxItem,
+  type InboxStatus,
   type Lead,
   type Person,
   type PrivateLead,
   type Stage,
   type Task,
+  type TaskHistory,
   type TaskStatus,
   type Temperature,
 } from "./types";
@@ -85,6 +88,9 @@ export function mapTask(id: string, raw: unknown): Task | null {
     closedAt: raw.closedAt == null ? null : stamp(raw.closedAt),
     longTerm: raw.longTerm === true,
     flagAfterDays: flagAfterDays(raw.flagAfterDays),
+    note: text(raw.note),
+    brand: oneOf(raw.brand, BRAND_IDS),
+    inboxId: text(raw.inboxId) || null,
     createdAt: stamp(raw.createdAt) ?? "",
     updatedAt: stamp(raw.updatedAt) ?? "",
   };
@@ -231,7 +237,49 @@ export function readDashboard(raw: unknown): DashboardData {
     leads,
     directives: [],
     privateLeads: {},
+    inbox: [],
+    history: {},
   };
+}
+
+const INBOX_STATUSES = ["new", "picked_up", "done"] as const;
+
+function cleanPublic(value: string): string {
+  return value.includes("@") ? "" : value;
+}
+
+export function mapInbox(id: string, raw: unknown): InboxItem | null {
+  if (!isRecord(raw)) return null;
+  const title = cleanPublic(text(raw.title));
+  const raisedBy = cleanPublic(text(raw.raisedBy));
+  const status = oneOf<InboxStatus>(raw.status, INBOX_STATUSES);
+  const assignees = stringList(raw.assignees).map(cleanPublic).filter(Boolean);
+  if (!id || !title || !raisedBy || !status || assignees.length === 0) return null;
+  return {
+    id,
+    title,
+    details: cleanPublic(text(raw.details)),
+    raisedBy,
+    assignees,
+    dueDate: raw.dueDate == null ? null : dateOnly(raw.dueDate),
+    brand: oneOf(raw.brand, BRAND_IDS),
+    status,
+    response: cleanPublic(text(raw.response)) || null,
+    note: cleanPublic(text(raw.note)) || null,
+    taskId: text(raw.taskId) || null,
+    createdAt: stamp(raw.createdAt) ?? "",
+    updatedAt: stamp(raw.updatedAt) ?? "",
+  };
+}
+
+export function mapHistory(id: string, taskId: string, raw: unknown): TaskHistory | null {
+  if (!isRecord(raw)) return null;
+  const personId = cleanPublic(text(raw.personId));
+  const action = cleanPublic(text(raw.action));
+  const summary = cleanPublic(text(raw.summary));
+  const at = stamp(raw.at);
+  if (!id || !taskId || !personId || !action || !summary || !at) return null;
+  return { id, taskId, personId, action, summary, at };
 }
 
 export function loadSeed(): DashboardData {

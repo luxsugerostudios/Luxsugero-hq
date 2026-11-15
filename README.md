@@ -67,9 +67,42 @@ The Admin SDK bypasses security rules, so you can load data before or after publ
 npm install
 export GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/luxsugero-hq-bot.json
 node scripts/push-data.mjs seed/seed.json
+node scripts/push-data.mjs seed/roles.json
 ```
 
 `FIREBASE_PROJECT_ID` defaults to `luxsugero-hq`.
+
+### Fill `config/roles`
+
+Do this in the Firebase console (**Firestore → config → roles**) or by editing a local copy of `seed/roles.json` and pushing it. Use lowercase emails. Do not commit the real addresses.
+
+1. Keep `luxsugerostudios@gmail.com` as the first admin.
+2. Replace the empty string in `admins` with Hari Om's Google email, also lowercase.
+3. Replace each `members` key and set the person id:
+
+| Placeholder key | Set the value to |
+|---|---|
+| `PASTE_HARI_OM_GMAIL` | `hari-om` |
+| `PASTE_DEBO_GMAIL` | `debo` |
+| `PASTE_SHRISHTI_GMAIL` | `shrishti` |
+| `PASTE_MAYANK_GMAIL` | `mayank` |
+| `PASTE_SIDDHANT_GMAIL` | `siddhant` |
+| `PASTE_INTIKHAB_GMAIL` | `intikhab` |
+| `PASTE_MEGHA_GMAIL` | `megha` |
+
+Hari Om's email has to be in **both** `admins` and `members` (value `hari-om`). An empty member value does not grant access. Publish `firestore.rules` before expecting the new permissions to apply.
+
+Example after filling (do not commit this):
+
+```json
+{
+  "admins": ["luxsugerostudios@gmail.com", "hari@gmail.com"],
+  "members": {
+    "hari@gmail.com": "hari-om",
+    "debo@gmail.com": "debo"
+  }
+}
+```
 
 Check a file without writing:
 
@@ -175,7 +208,55 @@ Public read, founder write.
 }
 ```
 
-`status` is `open` or `done`. `closedAt` is set when a task is marked done. `longTerm` and `flagAfterDays` are optional. Overdue means the task is open and the Asia/Kolkata calendar days since `givenDate` are greater than `flagAfterDays` when that number is set, otherwise 3. A long-term task (`longTerm: true`, usually `flagAfterDays: 7`) shows a Long-term badge. Carried means open and the given date is before today.
+`status` is `open` or `done`. `closedAt` is set when a task is marked done. `longTerm` and `flagAfterDays` are optional. Overdue means the task is open and the Asia/Kolkata calendar days since `givenDate` are greater than `flagAfterDays` when that number is set, otherwise 3. A long-term task (`longTerm: true`, usually `flagAfterDays: 7`) shows a Long-term badge. Optional `note`, `brand` (`stays`, `skybox`, `fh`, `braj`), and `inboxId` are public. Carried means open and the given date is before today.
+
+Changes are logged at `tasks/{id}/history/{eventId}`:
+
+```json
+{ "personId": "hari-om", "action": "status", "summary": "Marked done", "at": "2026-11-16T04:30:00.000Z" }
+```
+
+`personId` is `hari-om` (or another roster id), `founder`, or `admin`. The log is public and must not contain an email.
+
+### `config/roles`
+
+Founder write only. Signed-in admins and members can read it. Shape:
+
+```json
+{
+  "admins": ["luxsugerostudios@gmail.com", ""],
+  "members": {
+    "PASTE_HARI_OM_GMAIL": "",
+    "PASTE_DEBO_GMAIL": ""
+  }
+}
+```
+
+`admins` is a list of verified Google emails. `members` maps a Google email to a person id (`hari-om`, `debo`, `shrishti`, `mayank`, `siddhant`, `intikhab`, `megha`). Empty values grant nothing.
+
+### `inbox/{id}`
+
+The main bucket. Public read. Registered people can create. Status is `new`, `picked_up`, or `done`.
+
+```json
+{
+  "id": "request-id",
+  "title": "Review the layout",
+  "details": "Pending set",
+  "raisedBy": "debo",
+  "assignees": ["hari-om", "HQ"],
+  "dueDate": null,
+  "brand": "skybox",
+  "status": "new",
+  "response": null,
+  "note": null,
+  "taskId": null,
+  "createdAt": "2026-11-16T04:30:00.000Z",
+  "updatedAt": "2026-11-16T04:30:00.000Z"
+}
+```
+
+`assignees` are person ids, `HQ`, or an agent id. `raisedBy` is a person id, `founder`, or `admin`. No email fields.
 
 ### `agents/{id}`
 

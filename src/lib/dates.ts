@@ -64,6 +64,12 @@ export function weekBounds(todayIso: string): { start: string; end: string } {
   return { start: toIso(start), end: toIso(start + 6 * DAY) };
 }
 
+export function addDays(isoDate: string, days: number): string {
+  const midnight = utcMidnight(isoDate);
+  if (Number.isNaN(midnight)) return isoDate;
+  return toIso(midnight + days * DAY);
+}
+
 function toIso(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
