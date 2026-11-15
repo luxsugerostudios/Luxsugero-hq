@@ -1,0 +1,134 @@
+export const BRAND_IDS = ["stays", "skybox", "fh", "braj"] as const;
+export type BrandId = (typeof BRAND_IDS)[number];
+
+export const STAGES = [
+  "new",
+  "contacted",
+  "meet_booked",
+  "proposal",
+  "deposit",
+  "won",
+  "lost",
+] as const;
+export type Stage = (typeof STAGES)[number];
+
+export const TEMPERATURES = ["hot", "warm", "cold"] as const;
+export type Temperature = (typeof TEMPERATURES)[number];
+
+export const TASK_STATUSES = ["open", "done"] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+export const DIRECTIVE_STATUSES = ["queued", "picked_up", "done"] as const;
+export type DirectiveStatus = (typeof DIRECTIVE_STATUSES)[number];
+
+export const AGENT_GROUPS = ["HQ", "Brand PM", "Department"] as const;
+export type AgentGroup = (typeof AGENT_GROUPS)[number];
+
+export const BRAND_STATUSES = ["active", "paused", "founder-led"] as const;
+export type BrandStatus = (typeof BRAND_STATUSES)[number];
+
+export const BRAND_PREFIX: Record<BrandId, string> = {
+  stays: "STY",
+  skybox: "SKY",
+  fh: "FNH",
+  braj: "BRJ",
+};
+
+export type Person = {
+  id: string;
+  name: string;
+  role: string;
+  order: number;
+};
+
+export type Task = {
+  id: string;
+  title: string;
+  ownerId: string;
+  givenDate: string;
+  dueDate: string | null;
+  status: TaskStatus;
+  closedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Agent = {
+  id: string;
+  name: string;
+  group: AgentGroup;
+  focus: string;
+  waitingOnFounder: string[];
+  updatedAt: string;
+  order: number;
+};
+
+export type Headline = {
+  label: string;
+  value: string;
+};
+
+export type Brand = {
+  id: BrandId;
+  name: string;
+  short: string;
+  status: BrandStatus;
+  summary: string;
+  url: string | null;
+  headlines: Headline[];
+  waitingOnFounder: string[];
+  order: number;
+};
+
+/** Public lead. Never include a name, source, email, phone, or price. */
+export type Lead = {
+  code: string;
+  brand: BrandId;
+  stage: Stage;
+  temperature: Temperature;
+  country: string;
+  lastContactAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Founder-only record at private/vault/leads/{code}. */
+export type PrivateLead = {
+  code: string;
+  name: string;
+  source: string;
+  note: string;
+  country: string;
+  email: string;
+  phone: string;
+};
+
+export type Directive = {
+  id: string;
+  agentId: string;
+  text: string;
+  status: DirectiveStatus;
+  response: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DashboardData = {
+  people: Person[];
+  tasks: Task[];
+  agents: Agent[];
+  brands: Brand[];
+  leads: Lead[];
+  directives: Directive[];
+  privateLeads: Record<string, PrivateLead>;
+};
+
+export const EMPTY_DASHBOARD: DashboardData = {
+  people: [],
+  tasks: [],
+  agents: [],
+  brands: [],
+  leads: [],
+  directives: [],
+  privateLeads: {},
+};
