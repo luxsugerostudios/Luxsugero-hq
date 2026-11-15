@@ -76,6 +76,88 @@ test("public text rejects emails and prices", () => {
   assert.ok(priced.errors.length > 0);
 });
 
+test("tasks accept longTerm and flagAfterDays", () => {
+  const ok = buildPlan({
+    tasks: [
+      {
+        id: "task-long",
+        title: "Keep the land file warm",
+        longTerm: true,
+        flagAfterDays: 7,
+      },
+    ],
+  });
+  assert.deepEqual(ok.errors, []);
+  assert.equal(ok.ops[0].data.longTerm, true);
+  assert.equal(ok.ops[0].data.flagAfterDays, 7);
+
+  const cleared = buildPlan({
+    tasks: [{ id: "task-long", longTerm: false, flagAfterDays: null }],
+  });
+  assert.deepEqual(cleared.errors, []);
+  assert.equal(cleared.ops[0].data.longTerm, false);
+  assert.equal(cleared.ops[0].data.flagAfterDays, null);
+
+  const bad = buildPlan({
+    tasks: [{ id: "task-long", flagAfterDays: "7", longTerm: "yes" }],
+  });
+  assert.ok(bad.errors.some((error) => error.includes("flagAfterDays")));
+  assert.ok(bad.errors.some((error) => error.includes("longTerm")));
+});
+
+test("roles and inbox stay free of stray fields", () => {
+  const { errors, ops } = buildPlan({
+    roles: {
+      admins: ["luxsugerostudios@gmail.com", ""],
+      members: { PASTE_DEBO_GMAIL: "" },
+    },
+    inbox: [
+      {
+        id: "request-1",
+        title: "Review the layout",
+        details: "Pending set",
+        raisedBy: "debo",
+        assignees: ["hari-om", "HQ"],
+        status: "new",
+        brand: "skybox",
+      },
+    ],
+    tasks: [
+      {
+        id: "task-noted",
+        note: "Layouts are in",
+        brand: "skybox",
+        history: [
+          {
+            id: "hist-1",
+            personId: "debo",
+            action: "noted",
+            summary: "Updated the note",
+            at: "2026-11-16T04:30:00.000Z",
+          },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(errors, []);
+  assert.equal(ops.find((op) => op.path === "config/roles").data.admins[0], "luxsugerostudios@gmail.com");
+  assert.equal(ops.find((op) => op.path === "inbox/request-1").data.assignees[1], "HQ");
+  assert.equal(ops.find((op) => op.path === "tasks/task-noted/history/hist-1").data.personId, "debo");
+  const leaked = buildPlan({
+    inbox: [
+      {
+        id: "request-2",
+        title: "Ping",
+        details: "write ada@example.com",
+        raisedBy: "debo",
+        assignees: ["HQ"],
+        status: "new",
+      },
+    ],
+  });
+  assert.ok(leaked.errors.length > 0);
+});
+
 test("delete is explicit and partial updates stay small", () => {
   const { errors, ops } = buildPlan({
     tasks: [{ id: "task-gmail-slack", _delete: true }],

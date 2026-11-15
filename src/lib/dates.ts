@@ -29,9 +29,21 @@ export function daysOpen(givenDate: string, today: string): number {
   return Math.max(0, diffDays(givenDate, today));
 }
 
-/** Open for more than 3 calendar days. A task given today is day 0. */
-export function isOverdue(status: string, givenDate: string, today: string): boolean {
-  return status === "open" && diffDays(givenDate, today) > 3;
+/** Days open before a task is overdue. Uses `flagAfterDays` when it is set. */
+export function overdueAfter(flagAfterDays?: number | null): number {
+  return typeof flagAfterDays === "number" && Number.isInteger(flagAfterDays) && flagAfterDays >= 0
+    ? flagAfterDays
+    : 3;
+}
+
+/** Open for more calendar days than the threshold. A task given today is day 0. `today` is a Kolkata YYYY-MM-DD. */
+export function isOverdue(
+  status: string,
+  givenDate: string,
+  today: string,
+  flagAfterDays?: number | null,
+): boolean {
+  return status === "open" && diffDays(givenDate, today) > overdueAfter(flagAfterDays);
 }
 
 /** Still open after the day it was given. */
@@ -50,6 +62,12 @@ export function weekBounds(todayIso: string): { start: string; end: string } {
   const mondayOffset = day === 0 ? -6 : 1 - day;
   const start = midnight + mondayOffset * DAY;
   return { start: toIso(start), end: toIso(start + 6 * DAY) };
+}
+
+export function addDays(isoDate: string, days: number): string {
+  const midnight = utcMidnight(isoDate);
+  if (Number.isNaN(midnight)) return isoDate;
+  return toIso(midnight + days * DAY);
 }
 
 function toIso(ms: number): string {

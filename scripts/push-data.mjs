@@ -34,6 +34,8 @@ const TOP_KEYS = new Set([
   "leads",
   "directives",
   "private",
+  "roles",
+  "inbox",
 ]);
 const LEAD_SECRETS = new Set([
   "name",
@@ -127,6 +129,22 @@ function idField(pattern, label) {
     }
     return value.trim();
   };
+}
+
+function boolField(value, where, errors) {
+  if (typeof value !== "boolean") {
+    errors.push(`${where} must be a boolean`);
+    return undefined;
+  }
+  return value;
+}
+
+function flagAfterDaysField(value, where, errors) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 3650) {
+    errors.push(`${where} must be a non-negative whole number`);
+    return undefined;
+  }
+  return value;
 }
 
 function orderField(value, where, errors) {
@@ -227,6 +245,41 @@ const TASKS = {
   dueDate: nullOr(dateField),
   status: enumField(["open", "done"]),
   closedAt: nullOr(stampField),
+  longTerm: boolField,
+  flagAfterDays: nullOr(flagAfterDaysField),
+  note: stringField({ max: 2000, empty: true }),
+  brand: nullOr(enumField(["stays", "skybox", "fh", "braj"])),
+  inboxId: nullOr(idField(ID, "an inbox id")),
+  createdAt: stampField,
+  updatedAt: stampField,
+};
+
+function assigneesField(value, where, errors) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 8) {
+    errors.push(`${where} must list 1 to 8 tags`);
+    return undefined;
+  }
+  return value.map((item, index) => {
+    if (typeof item !== "string" || !item.trim() || item.includes("@") || item.trim().length > 80) {
+      errors.push(`${where}[${index}] must be a personId, HQ, or an agent id`);
+      return "";
+    }
+    return item.trim();
+  });
+}
+
+const INBOX = {
+  id: idField(ID, "a slug id"),
+  title: stringField({ max: 180 }),
+  details: stringField({ max: 4000, empty: true }),
+  raisedBy: idField(ID, "a person id, founder, or admin"),
+  assignees: assigneesField,
+  dueDate: nullOr(dateField),
+  brand: nullOr(enumField(["stays", "skybox", "fh", "braj"])),
+  status: enumField(["new", "picked_up", "done"]),
+  response: nullOr(stringField({ max: 4000, empty: true })),
+  note: nullOr(stringField({ max: 2000, empty: true })),
+  taskId: nullOr(idField(ID, "a task id")),
   createdAt: stampField,
   updatedAt: stampField,
 };
@@ -352,15 +405,105 @@ function finishPrivate(data, where, errors) {
   }
 }
 
+function splitTaskHistory(tasks) {
+  if (tasks == null) return { tasks, errors: [], ops: [] };
+  if (!Array.isArray(tasks)) return { tasks, errors: [], ops: [] };
+  const errors = [];
+  const ops = [];
+  const clean = tasks.map((row, index) => {
+    if (!isObject(row) || !Array.isArray(row.history)) return row;
+    const { history, ...rest } = row;
+    const taskId = typeof row.id === "string" ? row.id : "";
+    history.forEach((event, eventIndex) => {
+      const where = `tasks[${index}].history[${eventIndex}]`;
+      if (!isObject(event)) {
+        errors.push(`${where} must be an object`);
+        return;
+      }
+      const id = typeof event.id === "string" ? event.id.trim() : "";
+      const personId = typeof event.personId === "string" ? event.personId.trim() : "";
+      const action = typeof event.action === "string" ? event.action.trim() : "";
+      const summary = typeof event.summary === "string" ? event.summary.trim() : "";
+      const at = typeof event.at === "string" ? event.at.trim() : "";
+      if (!ID.test(id) || !taskId || !ID.test(personId) || !action || !summary || !STAMP.test(at)) {
+        errors.push(`${where} needs id, personId, action, summary, and at`);
+        return;
+      }
+      if ([personId, action, summary].some((value) => value.includes("@"))) {
+        errors.push(`${where} cannot contain an email`);
+        return;
+      }
+      ops.push({
+        kind: "set",
+        path: `tasks/${taskId}/history/${id}`,
+        data: { personId, action, summary, at },
+      });
+    });
+    return rest;
+  });
+  return { tasks: clean, errors, ops };
+}
+
+function planRoles(roles) {
+  const errors = [];
+  if (roles == null) return { errors, ops: [] };
+  if (!isObject(roles)) return { errors: ["roles must be an object"], ops: [] };
+  for (const key of Object.keys(roles)) {
+    if (key !== "admins" && key !== "members") errors.push(`roles.${key} is not allowed`);
+  }
+  const data = {};
+  if ("admins" in roles) {
+    if (!Array.isArray(roles.admins)) errors.push("roles.admins must be an array");
+    else {
+      data.admins = roles.admins.map((item, index) => {
+        if (typeof item !== "string" || item.length > 120 || /\s/.test(item)) {
+          errors.push(`roles.admins[${index}] must be an email or an empty placeholder`);
+          return "";
+        }
+        return item.trim();
+      });
+    }
+  }
+  if ("members" in roles) {
+    if (!isObject(roles.members)) errors.push("roles.members must be an object");
+    else {
+      const members = {};
+      for (const [key, value] of Object.entries(roles.members)) {
+        if (!key || key.length > 120 || /\s/.test(key) || key.includes("/")) {
+          errors.push("roles.members has an invalid email key");
+        }
+        if (typeof value !== "string" || (value !== "" && !ID.test(value))) {
+          errors.push(`roles.members value for ${key} must be a person id or empty`);
+        } else {
+          members[key] = value.trim();
+        }
+      }
+      data.members = members;
+    }
+  }
+  if (errors.length > 0 || Object.keys(data).length === 0) {
+    if (Object.keys(data).length === 0 && errors.length === 0) errors.push("roles has no fields to write");
+    return { errors, ops: [] };
+  }
+  return { errors, ops: [{ kind: "set", path: "config/roles", data }] };
+}
+
 export function buildPlan(payload) {
   if (!isObject(payload)) return { errors: ["Root JSON value must be an object"], ops: [] };
   const errors = [];
   for (const key of Object.keys(payload)) {
     if (!TOP_KEYS.has(key)) errors.push(`Unknown top-level key ${key}`);
   }
+  const split = splitTaskHistory(payload.tasks);
+  errors.push(...split.errors);
+  const roles = planRoles(payload.roles);
+  errors.push(...roles.errors);
   const chunks = [
     parseRecords("people", payload.people, PEOPLE, "id", (id) => `people/${id}`),
-    parseRecords("tasks", payload.tasks, TASKS, "id", (id) => `tasks/${id}`),
+    parseRecords("tasks", split.tasks, TASKS, "id", (id) => `tasks/${id}`),
+    { errors: [], ops: split.ops },
+    { errors: [], ops: roles.ops },
+    parseRecords("inbox", payload.inbox, INBOX, "id", (id) => `inbox/${id}`),
     parseRecords("agents", payload.agents, AGENTS, "id", (id) => `agents/${id}`),
     parseRecords("brands", payload.brands, BRANDS, "id", (id) => `brands/${id}`),
     parseRecords("leads", payload.leads, LEADS, "code", (id) => `leads/${id}`, finishLead),
@@ -408,7 +551,11 @@ export function summarize(ops) {
   for (const op of ops) {
     const bucket = op.path.startsWith("private/vault/leads/")
       ? "private/vault/leads"
-      : op.path.split("/")[0];
+      : op.path.includes("/history/")
+        ? "tasks/history"
+        : op.path.startsWith("config/")
+          ? op.path
+          : op.path.split("/")[0];
     const label = `${op.kind} ${bucket}`;
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }

@@ -40,6 +40,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Firestore rules
+        run: npm run test:rules
+
       - name: Check seeds
         run: npm run check:seed
 

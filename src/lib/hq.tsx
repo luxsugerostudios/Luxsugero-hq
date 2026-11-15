@@ -17,26 +17,42 @@ import {
 } from "firebase/auth";
 import {
   collection,
+  collectionGroup,
   deleteDoc,
   doc,
   onSnapshot,
+  setDoc,
+  updateDoc,
   writeBatch,
   type DocumentData,
 } from "firebase/firestore";
 import { FOUNDER_EMAIL, isFirebaseConfigured } from "../firebaseConfig";
 import { getServices } from "./firebase";
+import { kolkataDay } from "./dates";
 import {
   loadSeed,
   mapAgent,
   mapBrand,
   mapDirective,
+  mapHistory,
+  mapInbox,
   mapLead,
   mapPerson,
   mapPrivateLead,
   mapTask,
 } from "./map";
-import type { DashboardData, Directive, Lead, PrivateLead, Task } from "./types";
+import type {
+  DashboardData,
+  Directive,
+  InboxItem,
+  Lead,
+  PrivateLead,
+  RolesDoc,
+  Task,
+} from "./types";
 import { EMPTY_DASHBOARD } from "./types";
+
+export type Access = "signed-out" | "pending" | "guest" | "member" | "admin";
 
 export type Phase = "unconfigured" | "connecting" | "live" | "denied" | "unreachable";
 
@@ -48,14 +64,25 @@ export type HqValue = {
   user: User | null;
   founderAccount: boolean;
   canEdit: boolean;
+  isAdmin: boolean;
+  isMember: boolean;
+  access: Access;
+  personId: string | null;
   viewOnly: boolean;
   data: DashboardData;
   actionError: string | null;
   clearActionError: () => void;
   signIn: () => Promise<void>;
   signOutUser: () => Promise<void>;
-  saveTask: (task: Task) => Promise<void>;
+  saveTask: (task: Task, summary?: string) => Promise<void>;
+  setTaskStatus: (task: Task, status: Task["status"]) => Promise<void>;
+  setTaskNote: (task: Task, note: string) => Promise<void>;
+  reassignTask: (task: Task, ownerId: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
+  createInbox: (item: InboxItem) => Promise<void>;
+  updateInbox: (id: string, patch: Partial<Pick<InboxItem, "status" | "response" | "note" | "assignees" | "taskId">>) => Promise<void>;
+  acceptInbox: (item: InboxItem) => Promise<void>;
+  convertInbox: (item: InboxItem, ownerId: string) => Promise<void>;
   saveLead: (lead: Lead, privateLead: PrivateLead | null) => Promise<void>;
   deleteLead: (code: string) => Promise<void>;
   saveDirective: (directive: Directive) => Promise<void>;
@@ -111,14 +138,46 @@ export function HqProvider({ children }: { children: ReactNode }) {
   const [phase, setPhase] = useState<Phase>(configured ? "connecting" : "unconfigured");
   const [data, setData] = useState<DashboardData>(() => loadSeed());
   const [actionError, setActionError] = useState<string | null>(null);
+  const [rolesDoc, setRolesDoc] = useState<RolesDoc | null>(null);
+  const [rolesState, setRolesState] = useState<"idle" | "loading" | "ready" | "denied">("idle");
 
   const founderAccount = Boolean(
     user?.email &&
       user.email.toLowerCase() === FOUNDER_EMAIL &&
       user.emailVerified,
   );
+  const email = user?.email?.toLowerCase() ?? "";
+  const mappedPerson =
+    email && rolesDoc && typeof rolesDoc.members?.[email] === "string"
+      ? rolesDoc.members[email]
+      : "";
+  const listedAdmin = Boolean(
+    email && rolesDoc?.admins?.some((item) => item.toLowerCase() === email),
+  );
+  let access: Access = "signed-out";
+  let personId: string | null = null;
+  if (!user) {
+    access = "signed-out";
+  } else if (!user.emailVerified) {
+    access = "guest";
+  } else if (phase !== "live") {
+    access = founderAccount ? "admin" : "pending";
+    personId = founderAccount ? mappedPerson || "founder" : null;
+  } else if (founderAccount || listedAdmin) {
+    access = "admin";
+    personId = mappedPerson || (founderAccount ? "founder" : "admin");
+  } else if (mappedPerson) {
+    access = "member";
+    personId = mappedPerson;
+  } else if (rolesState === "loading" || rolesState === "idle") {
+    access = "pending";
+  } else {
+    access = "guest";
+  }
   const canEdit = founderAccount && phase === "live";
-  const viewOnly = Boolean(user) && !founderAccount;
+  const isAdmin = access === "admin" && phase === "live";
+  const isMember = access === "member" && phase === "live";
+  const viewOnly = access === "guest";
 
   useEffect(() => {
     if (!services) return;
@@ -157,6 +216,8 @@ export function HqProvider({ children }: { children: ReactNode }) {
         ...buffer,
         directives: prev.directives,
         privateLeads: prev.privateLeads,
+        inbox: prev.inbox,
+        history: prev.history,
       }));
       setPhase("live");
     };
@@ -213,6 +274,76 @@ export function HqProvider({ children }: { children: ReactNode }) {
   }, [services]);
 
   useEffect(() => {
+    if (!services || phase !== "live") return;
+    const db = services.db;
+    const unsubInbox = onSnapshot(
+      collection(db, "inbox"),
+      (snap) => {
+        setData((prev) => ({ ...prev, inbox: mapped(snap.docs, mapInbox) }));
+      },
+      () => {
+        setData((prev) => ({ ...prev, inbox: [] }));
+      },
+    );
+    const unsubHistory = onSnapshot(
+      collectionGroup(db, "history"),
+      (snap) => {
+        const history: DashboardData["history"] = {};
+        for (const item of snap.docs) {
+          const taskId = item.ref.parent.parent?.id;
+          if (!taskId) continue;
+          const event = mapHistory(item.id, taskId, item.data());
+          if (!event) continue;
+          history[taskId] = [...(history[taskId] ?? []), event];
+        }
+        setData((prev) => ({ ...prev, history }));
+      },
+      () => {
+        setData((prev) => ({ ...prev, history: {} }));
+      },
+    );
+    return () => {
+      unsubInbox();
+      unsubHistory();
+    };
+  }, [services, phase]);
+
+  useEffect(() => {
+    if (!services || !user || phase !== "live") {
+      setRolesDoc(null);
+      setRolesState(user && phase === "live" ? "loading" : "idle");
+      return;
+    }
+    setRolesState("loading");
+    return onSnapshot(
+      doc(services.db, "config", "roles"),
+      (snap) => {
+        if (!snap.exists()) {
+          setRolesDoc({ admins: [], members: {} });
+          setRolesState("ready");
+          return;
+        }
+        const raw = snap.data() as { admins?: unknown; members?: unknown };
+        const admins = Array.isArray(raw.admins)
+          ? raw.admins.filter((item): item is string => typeof item === "string")
+          : [];
+        const members: Record<string, string> = {};
+        if (raw.members && typeof raw.members === "object") {
+          for (const [key, value] of Object.entries(raw.members)) {
+            members[key.toLowerCase()] = typeof value === "string" ? value : "";
+          }
+        }
+        setRolesDoc({ admins, members });
+        setRolesState("ready");
+      },
+      (error) => {
+        setRolesDoc(null);
+        setRolesState(codeOf(error).includes("permission-denied") ? "denied" : "ready");
+      },
+    );
+  }, [services, user, phase]);
+
+  useEffect(() => {
     if (!services || !canEdit) {
       setData((prev) =>
         prev.directives.length === 0 && Object.keys(prev.privateLeads).length === 0
@@ -258,12 +389,51 @@ export function HqProvider({ children }: { children: ReactNode }) {
       return services.db;
     }
 
+    function actorId() {
+      return personId || (founderAccount ? "founder" : "admin");
+    }
+
+    async function writeHistory(taskId: string, action: string, summary: string) {
+      if (!services || !personId) return;
+      await setDoc(doc(services.db, "tasks", taskId, "history", crypto.randomUUID()), {
+        personId: actorId(),
+        action,
+        summary,
+        at: new Date().toISOString(),
+      }).catch((error: unknown) => {
+        setActionError(readable(error));
+      });
+    }
+
+    function taskPayload(task: Task) {
+      return {
+        id: task.id,
+        title: task.title,
+        ownerId: task.ownerId,
+        givenDate: task.givenDate,
+        dueDate: task.dueDate,
+        status: task.status,
+        closedAt: task.closedAt,
+        longTerm: task.longTerm,
+        flagAfterDays: task.flagAfterDays,
+        note: task.note,
+        brand: task.brand,
+        inboxId: task.inboxId,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+      };
+    }
+
     return {
       configured,
       phase,
       user,
       founderAccount,
       canEdit,
+      isAdmin,
+      isMember,
+      access,
+      personId,
       viewOnly,
       data,
       actionError,
@@ -289,33 +459,194 @@ export function HqProvider({ children }: { children: ReactNode }) {
         await signOut(services.auth);
         setData((prev) => ({ ...prev, directives: [], privateLeads: {} }));
       },
-      async saveTask(task) {
-        const db = await requireDb();
-        const ref = doc(db, "tasks", task.id);
-        await writeBatch(db)
-          .set(ref, {
-            id: task.id,
-            title: task.title,
-            ownerId: task.ownerId,
-            givenDate: task.givenDate,
-            dueDate: task.dueDate,
-            status: task.status,
-            closedAt: task.closedAt,
-            createdAt: task.createdAt,
-            updatedAt: task.updatedAt,
-          })
-          .commit()
-          .catch((error: unknown) => {
-            setActionError(readable(error));
-            throw error;
-          });
-      },
-      async deleteTask(id) {
-        const db = await requireDb();
-        await deleteDoc(doc(db, "tasks", id)).catch((error: unknown) => {
+      async saveTask(task, summary = "Updated the task") {
+        if (!services || !isAdmin) {
+          const message = "Only an admin can assign or edit a task.";
+          setActionError(message);
+          throw new Error(message);
+        }
+        const creating = !data.tasks.some((item) => item.id === task.id);
+        await setDoc(doc(services.db, "tasks", task.id), taskPayload(task)).catch((error: unknown) => {
           setActionError(readable(error));
           throw error;
         });
+        await writeHistory(task.id, creating ? "created" : "updated", summary);
+      },
+      async setTaskStatus(task, status) {
+        if (!services || (!isAdmin && !isMember)) {
+          const message = "Sign in with a registered account to update a task.";
+          setActionError(message);
+          throw new Error(message);
+        }
+        const updatedAt = new Date().toISOString();
+        const closedAt = status === "done" ? updatedAt : null;
+        await updateDoc(doc(services.db, "tasks", task.id), {
+          status,
+          closedAt,
+          updatedAt,
+        }).catch((error: unknown) => {
+          setActionError(readable(error));
+          throw error;
+        });
+        await writeHistory(task.id, "status", status === "done" ? "Marked done" : "Reopened");
+      },
+      async setTaskNote(task, note) {
+        if (!services || (!isAdmin && !isMember)) {
+          const message = "Sign in with a registered account to comment.";
+          setActionError(message);
+          throw new Error(message);
+        }
+        const updatedAt = new Date().toISOString();
+        await updateDoc(doc(services.db, "tasks", task.id), { note, updatedAt }).catch(
+          (error: unknown) => {
+            setActionError(readable(error));
+            throw error;
+          },
+        );
+        await writeHistory(task.id, "noted", "Updated the note");
+      },
+      async reassignTask(task, ownerId) {
+        if (!services || !isAdmin) {
+          const message = "Only an admin can reassign a task.";
+          setActionError(message);
+          throw new Error(message);
+        }
+        const updatedAt = new Date().toISOString();
+        await updateDoc(doc(services.db, "tasks", task.id), { ownerId, updatedAt }).catch(
+          (error: unknown) => {
+            setActionError(readable(error));
+            throw error;
+          },
+        );
+        await writeHistory(task.id, "reassigned", `Reassigned to ${ownerId}`);
+      },
+      async deleteTask(id) {
+        if (!services || !isAdmin) {
+          const message = "Only an admin can delete a task.";
+          setActionError(message);
+          throw new Error(message);
+        }
+        await writeHistory(id, "deleted", "Deleted the task");
+        await deleteDoc(doc(services.db, "tasks", id)).catch((error: unknown) => {
+          setActionError(readable(error));
+          throw error;
+        });
+      },
+      async createInbox(item) {
+        if (!services || (!isAdmin && !isMember) || !personId) {
+          const message = "Sign in with a registered account to add a request.";
+          setActionError(message);
+          throw new Error(message);
+        }
+        await setDoc(doc(services.db, "inbox", item.id), {
+          title: item.title,
+          details: item.details,
+          raisedBy: personId,
+          assignees: item.assignees,
+          dueDate: item.dueDate,
+          brand: item.brand,
+          status: "new",
+          response: null,
+          note: null,
+          taskId: null,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        }).catch((error: unknown) => {
+          setActionError(readable(error));
+          throw error;
+        });
+      },
+      async updateInbox(id, patch) {
+        if (!services || (!isAdmin && !isMember)) {
+          const message = "Sign in with a registered account to update a request.";
+          setActionError(message);
+          throw new Error(message);
+        }
+        const next: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+        if (patch.status) next.status = patch.status;
+        if ("response" in patch) next.response = patch.response;
+        if ("note" in patch) next.note = patch.note;
+        if (isAdmin && patch.assignees) next.assignees = patch.assignees;
+        if (isAdmin && "taskId" in patch) next.taskId = patch.taskId;
+        await updateDoc(doc(services.db, "inbox", id), next).catch((error: unknown) => {
+          setActionError(readable(error));
+          throw error;
+        });
+      },
+      async acceptInbox(item) {
+        if (!services || !isMember || !personId) {
+          const message = "Only a tagged member can accept a request.";
+          setActionError(message);
+          throw new Error(message);
+        }
+        const now = new Date().toISOString();
+        const taskId = crypto.randomUUID();
+        const task: Task = {
+          id: taskId,
+          title: item.title,
+          ownerId: personId,
+          givenDate: kolkataDay(),
+          dueDate: item.dueDate,
+          status: "open",
+          closedAt: null,
+          longTerm: false,
+          flagAfterDays: null,
+          note: "",
+          brand: item.brand,
+          inboxId: item.id,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await setDoc(doc(services.db, "tasks", taskId), taskPayload(task)).catch((error: unknown) => {
+          setActionError(readable(error));
+          throw error;
+        });
+        await updateDoc(doc(services.db, "inbox", item.id), {
+          status: "picked_up",
+          updatedAt: now,
+        }).catch((error: unknown) => {
+          setActionError(readable(error));
+          throw error;
+        });
+        await writeHistory(taskId, "accepted", "Accepted from the main bucket");
+      },
+      async convertInbox(item, ownerId) {
+        if (!services || !isAdmin) {
+          const message = "Only an admin can convert a request into a task.";
+          setActionError(message);
+          throw new Error(message);
+        }
+        const now = new Date().toISOString();
+        const taskId = crypto.randomUUID();
+        const task: Task = {
+          id: taskId,
+          title: item.title,
+          ownerId,
+          givenDate: kolkataDay(),
+          dueDate: item.dueDate,
+          status: "open",
+          closedAt: null,
+          longTerm: false,
+          flagAfterDays: null,
+          note: "",
+          brand: item.brand,
+          inboxId: item.id,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await setDoc(doc(services.db, "tasks", taskId), taskPayload(task)).catch((error: unknown) => {
+          setActionError(readable(error));
+          throw error;
+        });
+        await updateDoc(doc(services.db, "inbox", item.id), {
+          status: "picked_up",
+          taskId,
+          updatedAt: now,
+        }).catch((error: unknown) => {
+          setActionError(readable(error));
+          throw error;
+        });
+        await writeHistory(taskId, "created", `Converted from the main bucket for ${ownerId}`);
       },
       async saveLead(lead, privateLead) {
         const db = await requireDb();
@@ -379,9 +710,13 @@ export function HqProvider({ children }: { children: ReactNode }) {
   }, [
     actionError,
     canEdit,
+    access,
     configured,
     data,
     founderAccount,
+    isAdmin,
+    isMember,
+    personId,
     phase,
     services,
     user,

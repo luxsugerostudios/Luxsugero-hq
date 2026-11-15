@@ -1,15 +1,79 @@
 rules_version = '2';
 
-// Public collections are world-readable. Writes require the verified founder
-// Google account. Directive text and the private tree (lead names, sources,
-// emails, phones) are readable and writable only by that same account.
-// Enforcement is here, not in the UI.
+// Public reads stay open. Task administration is the founder plus any verified
+// email listed in config/roles.admins (Hari Om, once that email is filled in).
+// Team members may only tick their own tasks and respond to inbox items tagged
+// to them or raised by them. Lead names, directives, and private data stay with
+// luxsugerostudios@gmail.com. History and the main bucket are public, but
+// documents may not contain an email address.
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isFounder() {
-      return request.auth != null
-        && request.auth.token.email == 'luxsugerostudios@gmail.com'
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return signedIn()
+        && request.auth.token.email is string
         && request.auth.token.email_verified == true;
+    }
+
+    function isFounder() {
+      return isVerified()
+        && request.auth.token.email == 'luxsugerostudios@gmail.com';
+    }
+
+    function rolesPath() {
+      return /databases/$(database)/documents/config/roles;
+    }
+
+    function rolesData() {
+      return get(rolesPath()).data;
+    }
+
+    function isListedAdmin() {
+      return isVerified()
+        && exists(rolesPath())
+        && request.auth.token.email in rolesData().admins;
+    }
+
+    function memberPersonId() {
+      return rolesData().members[request.auth.token.email];
+    }
+
+    function isMember() {
+      return isVerified()
+        && exists(rolesPath())
+        && request.auth.token.email in rolesData().members
+        && memberPersonId() is string
+        && memberPersonId().size() > 0;
+    }
+
+    function isAdmin() {
+      return isFounder() || isListedAdmin();
+    }
+
+    function noSecretKeys() {
+      return !request.resource.data.keys().hasAny([
+        'email',
+        'phone',
+        'telephone',
+        'mobile',
+        'source',
+        'price',
+        'cost',
+        'amount',
+        'budget',
+        'name',
+        'fullName',
+        'firstName',
+        'lastName'
+      ]);
+    }
+
+    function textOk(value) {
+      return value == null
+        || (value is string && value.size() <= 4000 && !value.matches('.*@.*'));
     }
 
     function noContactOrMoneyFields() {
@@ -26,7 +90,6 @@ service cloud.firestore {
       ]);
     }
 
-    // Public lead cards are anonymous codes. Identity stays under private/.
     function publicLeadIsAnonymous() {
       return noContactOrMoneyFields()
         && !request.resource.data.keys().hasAny([
@@ -37,16 +100,153 @@ service cloud.firestore {
         ]);
     }
 
+    function taskTextSafe() {
+      return noSecretKeys()
+        && request.resource.data.title is string
+        && textOk(request.resource.data.title)
+        && (!('note' in request.resource.data) || textOk(request.resource.data.note));
+    }
+
+    function memberOwnsTask() {
+      return isMember() && resource.data.ownerId == memberPersonId();
+    }
+
+    function memberTaskUpdate() {
+      return memberOwnsTask()
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.status in ['open', 'done']
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'closedAt', 'updatedAt', 'note'])
+        && taskTextSafe();
+    }
+
+    function memberAcceptCreate() {
+      return isMember()
+        && request.resource.data.ownerId == memberPersonId()
+        && request.resource.data.status == 'open'
+        && request.resource.data.inboxId is string
+        && exists(/databases/$(database)/documents/inbox/$(request.resource.data.inboxId))
+        && get(/databases/$(database)/documents/inbox/$(request.resource.data.inboxId)).data.assignees
+            .hasAny([memberPersonId()])
+        && get(/databases/$(database)/documents/inbox/$(request.resource.data.inboxId)).data.status
+            in ['new', 'picked_up']
+        && taskTextSafe();
+    }
+
+    function historyActorOk() {
+      return request.resource.data.personId is string
+        && !request.resource.data.personId.matches('.*@.*')
+        && (
+          (isFounder() && request.resource.data.personId == 'founder')
+          || (isMember() && request.resource.data.personId == memberPersonId())
+        );
+    }
+
+    function historySafe() {
+      return request.resource.data.keys().hasOnly(['personId', 'action', 'summary', 'at'])
+        && historyActorOk()
+        && request.resource.data.action is string
+        && request.resource.data.summary is string
+        && textOk(request.resource.data.summary)
+        && request.resource.data.at is string;
+    }
+
+    function tagOk(list, index) {
+      return list[index] is string
+        && list[index].size() > 0
+        && list[index].size() < 80
+        && !list[index].matches('.*@.*');
+    }
+
+    function assigneesOk(list) {
+      return list is list
+        && list.size() > 0
+        && list.size() <= 8
+        && tagOk(list, 0)
+        && (list.size() < 2 || tagOk(list, 1))
+        && (list.size() < 3 || tagOk(list, 2))
+        && (list.size() < 4 || tagOk(list, 3))
+        && (list.size() < 5 || tagOk(list, 4))
+        && (list.size() < 6 || tagOk(list, 5))
+        && (list.size() < 7 || tagOk(list, 6))
+        && (list.size() < 8 || tagOk(list, 7));
+    }
+
+    function expectedRaiser() {
+      return isMember()
+        ? memberPersonId()
+        : (isFounder() ? 'founder' : (isListedAdmin() ? 'admin' : ''));
+    }
+
+    function canCreateInbox() {
+      return (isFounder() || isListedAdmin() || isMember())
+        && expectedRaiser().size() > 0
+        && request.resource.data.raisedBy == expectedRaiser();
+    }
+
+    function inboxTextSafe() {
+      return noSecretKeys()
+        && request.resource.data.title is string
+        && textOk(request.resource.data.title)
+        && request.resource.data.details is string
+        && textOk(request.resource.data.details)
+        && (!('response' in request.resource.data) || textOk(request.resource.data.response))
+        && (!('note' in request.resource.data) || textOk(request.resource.data.note))
+        && request.resource.data.raisedBy is string
+        && !request.resource.data.raisedBy.matches('.*@.*')
+        && assigneesOk(request.resource.data.assignees)
+        && request.resource.data.status in ['new', 'picked_up', 'done'];
+    }
+
+    function raisedByMe() {
+      return (isMember() && resource.data.raisedBy == memberPersonId())
+        || (isFounder() && resource.data.raisedBy == 'founder')
+        || (isListedAdmin() && !isMember() && resource.data.raisedBy == 'admin');
+    }
+
+    function taggedMe() {
+      return isMember() && resource.data.assignees.hasAny([memberPersonId()]);
+    }
+
+    function memberInboxUpdate() {
+      return (raisedByMe() || taggedMe())
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'response', 'note', 'updatedAt'])
+        && inboxTextSafe();
+    }
+
+    function adminInboxUpdate() {
+      return isAdmin()
+        && request.resource.data.raisedBy == resource.data.raisedBy
+        && inboxTextSafe();
+    }
+
     match /people/{id} {
       allow read: if true;
       allow create, update: if isFounder() && noContactOrMoneyFields();
       allow delete: if isFounder();
     }
 
-    match /tasks/{id} {
+    match /tasks/{taskId} {
       allow read: if true;
-      allow create, update: if isFounder() && noContactOrMoneyFields();
-      allow delete: if isFounder();
+      allow create: if (isAdmin() && taskTextSafe()) || memberAcceptCreate();
+      allow update: if (isAdmin() && taskTextSafe()) || memberTaskUpdate();
+      allow delete: if isAdmin();
+
+      match /history/{eventId} {
+        allow read: if true;
+        allow create: if historySafe() && (
+          isFounder()
+          || (isListedAdmin() && isMember())
+          || (isMember() && get(/databases/$(database)/documents/tasks/$(taskId)).data.ownerId == memberPersonId())
+        );
+        allow update, delete: if false;
+      }
+    }
+
+    // Collection-group reads of history. Writes stay on the nested match above.
+    match /{path=**}/history/{eventId} {
+      allow read: if true;
     }
 
     match /agents/{id} {
@@ -71,15 +271,35 @@ service cloud.firestore {
       allow read, write: if isFounder();
     }
 
-    // Lead PII document path: private/vault/leads/{code}
-    // (Firestore alternates collection/document, so `vault` is the parent doc.)
     match /private/vault/leads/{code} {
       allow read, write: if isFounder();
     }
 
-    // The rest of the private tree is founder-only as well.
     match /private/{document=**} {
       allow read, write: if isFounder();
+    }
+
+    match /config/roles {
+      allow get: if isFounder()
+        || (isVerified()
+          && resource != null
+          && request.auth.token.email in resource.data.admins)
+        || (isVerified()
+          && resource != null
+          && request.auth.token.email in resource.data.members
+          && resource.data.members[request.auth.token.email] is string
+          && resource.data.members[request.auth.token.email].size() > 0);
+      allow list: if false;
+      allow create, update, delete: if isFounder();
+    }
+
+    match /inbox/{id} {
+      allow read: if true;
+      allow create: if canCreateInbox()
+        && request.resource.data.status == 'new'
+        && inboxTextSafe();
+      allow update: if adminInboxUpdate() || memberInboxUpdate();
+      allow delete: if isAdmin();
     }
   }
 }

@@ -49,8 +49,45 @@ export type Task = {
   dueDate: string | null;
   status: TaskStatus;
   closedAt: string | null;
+  longTerm: boolean;
+  flagAfterDays: number | null;
+  note: string;
+  brand: BrandId | null;
+  inboxId: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type TaskHistory = {
+  id: string;
+  taskId: string;
+  personId: string;
+  action: string;
+  summary: string;
+  at: string;
+};
+
+export type InboxStatus = "new" | "picked_up" | "done";
+
+export type InboxItem = {
+  id: string;
+  title: string;
+  details: string;
+  raisedBy: string;
+  assignees: string[];
+  dueDate: string | null;
+  brand: BrandId | null;
+  status: InboxStatus;
+  response: string | null;
+  note: string | null;
+  taskId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RolesDoc = {
+  admins: string[];
+  members: Record<string, string>;
 };
 
 export type Agent = {
@@ -121,6 +158,8 @@ export type DashboardData = {
   leads: Lead[];
   directives: Directive[];
   privateLeads: Record<string, PrivateLead>;
+  inbox: InboxItem[];
+  history: Record<string, TaskHistory[]>;
 };
 
 export const EMPTY_DASHBOARD: DashboardData = {
@@ -131,4 +170,6 @@ export const EMPTY_DASHBOARD: DashboardData = {
   leads: [],
   directives: [],
   privateLeads: {},
+  inbox: [],
+  history: {},
 };
