@@ -1,0 +1,269 @@
+{
+  "people": [
+    { "id": "hari-om", "name": "Hari Om", "role": "Project & sales head", "order": 1 },
+    { "id": "shrishti", "name": "Shrishti", "role": "Marketing head", "order": 2 },
+    { "id": "debo", "name": "Debo", "role": "Content / marketing", "order": 3 },
+    { "id": "siddhant", "name": "Siddhant", "role": "", "order": 4 },
+    { "id": "intikhab", "name": "Intikhab", "role": "", "order": 5 },
+    { "id": "mayank", "name": "Mayank", "role": "", "order": 6 },
+    { "id": "megha", "name": "Megha", "role": "", "order": 7 },
+    { "id": "everyone", "name": "Everyone", "role": "Shared", "order": 8 },
+    { "id": "unassigned", "name": "Unassigned", "role": "Inbox", "order": 9 }
+  ],
+  "tasks": [
+    {
+      "id": "task-gmail-slack",
+      "title": "Share Gmail for Slack invites",
+      "ownerId": "everyone",
+      "givenDate": "2026-11-10",
+      "dueDate": null,
+      "status": "open",
+      "closedAt": null,
+      "createdAt": "2026-11-10T04:30:00.000Z",
+      "updatedAt": "2026-11-10T04:30:00.000Z"
+    },
+    {
+      "id": "task-slack-tutorial",
+      "title": "Share Slack tutorial with team",
+      "ownerId": "hari-om",
+      "givenDate": "2026-11-10",
+      "dueDate": null,
+      "status": "open",
+      "closedAt": null,
+      "createdAt": "2026-11-10T04:30:00.000Z",
+      "updatedAt": "2026-11-10T04:30:00.000Z"
+    },
+    {
+      "id": "task-class-report",
+      "title": "Share yesterday's class report",
+      "ownerId": "siddhant",
+      "givenDate": "2026-11-10",
+      "dueDate": null,
+      "status": "open",
+      "closedAt": null,
+      "createdAt": "2026-11-10T04:30:00.000Z",
+      "updatedAt": "2026-11-10T04:30:00.000Z"
+    },
+    {
+      "id": "task-debo-class",
+      "title": "Coordinate with Debo after content creation class",
+      "ownerId": "siddhant",
+      "givenDate": "2026-11-10",
+      "dueDate": null,
+      "status": "open",
+      "closedAt": null,
+      "createdAt": "2026-11-10T04:30:00.000Z",
+      "updatedAt": "2026-11-10T04:30:00.000Z"
+    },
+    {
+      "id": "task-layouts",
+      "title": "Complete pending layouts",
+      "ownerId": "intikhab",
+      "givenDate": "2026-11-10",
+      "dueDate": null,
+      "status": "open",
+      "closedAt": null,
+      "createdAt": "2026-11-10T04:30:00.000Z",
+      "updatedAt": "2026-11-10T04:30:00.000Z"
+    },
+    {
+      "id": "task-mayank",
+      "title": "Coordinate with Mayank on ongoing task",
+      "ownerId": "shrishti",
+      "givenDate": "2026-11-10",
+      "dueDate": null,
+      "status": "open",
+      "closedAt": null,
+      "createdAt": "2026-11-10T04:30:00.000Z",
+      "updatedAt": "2026-11-10T04:30:00.000Z"
+    },
+    {
+      "id": "task-campaigns",
+      "title": "Stays and F&H campaigns to go live",
+      "ownerId": "unassigned",
+      "givenDate": "2026-11-10",
+      "dueDate": null,
+      "status": "open",
+      "closedAt": null,
+      "createdAt": "2026-11-10T04:30:00.000Z",
+      "updatedAt": "2026-11-10T04:30:00.000Z"
+    },
+    {
+      "id": "task-daily-content",
+      "title": "Daily content publishing",
+      "ownerId": "unassigned",
+      "givenDate": "2026-11-10",
+      "dueDate": null,
+      "status": "open",
+      "closedAt": null,
+      "createdAt": "2026-11-10T04:30:00.000Z",
+      "updatedAt": "2026-11-10T04:30:00.000Z"
+    },
+    {
+      "id": "task-megha-leads",
+      "title": "Coordinate with Megha on leads",
+      "ownerId": "unassigned",
+      "givenDate": "2026-11-10",
+      "dueDate": null,
+      "status": "open",
+      "closedAt": null,
+      "createdAt": "2026-11-10T04:30:00.000Z",
+      "updatedAt": "2026-11-10T04:30:00.000Z"
+    },
+    {
+      "id": "task-performance",
+      "title": "Share performance report",
+      "ownerId": "unassigned",
+      "givenDate": "2026-11-10",
+      "dueDate": null,
+      "status": "open",
+      "closedAt": null,
+      "createdAt": "2026-11-10T04:30:00.000Z",
+      "updatedAt": "2026-11-10T04:30:00.000Z"
+    }
+  ],
+  "agents": [
+    { "id": "hq-main", "name": "HQ Main Manager", "group": "HQ", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 1 },
+    { "id": "pm-skybox", "name": "Luxskybox PM", "group": "Brand PM", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 2 },
+    { "id": "pm-stays", "name": "Stays PM", "group": "Brand PM", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 3 },
+    { "id": "pm-fh", "name": "Forest & Hills PM", "group": "Brand PM", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 4 },
+    { "id": "pm-braj", "name": "Braj Murliwala PM", "group": "Brand PM", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 5 },
+    { "id": "dept-sales-head", "name": "Sales Head", "group": "Department", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 6 },
+    { "id": "dept-inbound", "name": "Inbound Sales", "group": "Department", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 7 },
+    { "id": "dept-outbound", "name": "Outbound Sales", "group": "Department", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 8 },
+    { "id": "dept-marketing", "name": "Marketing Head", "group": "Department", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 9 },
+    { "id": "dept-content", "name": "Content Head", "group": "Department", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 10 },
+    { "id": "dept-copy", "name": "Copywriter", "group": "Department", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 11 },
+    { "id": "dept-ota", "name": "OTA Manager", "group": "Department", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 12 },
+    { "id": "dept-collab", "name": "Brand Collab Outreach", "group": "Department", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 13 },
+    { "id": "dept-rd", "name": "R&D Head", "group": "Department", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 14 },
+    { "id": "dept-architect", "name": "Architect", "group": "Department", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 15 },
+    { "id": "dept-legal", "name": "Legal & Compliance", "group": "Department", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 16 },
+    { "id": "dept-hr", "name": "HR", "group": "Department", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 17 },
+    { "id": "dept-advisor", "name": "Advisor", "group": "Department", "focus": "Awaiting first sync", "waitingOnFounder": [], "updatedAt": "2026-11-10T04:30:00.000Z", "order": 18 }
+  ],
+  "brands": [
+    {
+      "id": "skybox",
+      "name": "Luxskybox",
+      "short": "Skybox",
+      "status": "active",
+      "summary": "Portable homes",
+      "url": "https://luxskybox.com",
+      "headlines": [
+        { "label": "Warm leads", "value": "6" },
+        { "label": "Deposits", "value": "0" },
+        { "label": "Meet booked", "value": "1" }
+      ],
+      "waitingOnFounder": [],
+      "order": 1
+    },
+    {
+      "id": "stays",
+      "name": "Luxsugero Stays",
+      "short": "Stays",
+      "status": "active",
+      "summary": "Short-term rentals · Uttarakhand and Vrindavan",
+      "url": null,
+      "headlines": [
+        { "label": "Regions", "value": "2" },
+        { "label": "Pipeline", "value": "0" },
+        { "label": "Campaigns", "value": "0" }
+      ],
+      "waitingOnFounder": [],
+      "order": 2
+    },
+    {
+      "id": "fh",
+      "name": "Forest & Hills",
+      "short": "F&H",
+      "status": "founder-led",
+      "summary": "Plotted land near Dehradun",
+      "url": null,
+      "headlines": [
+        { "label": "Pipeline", "value": "0" },
+        { "label": "Mode", "value": "On ask" },
+        { "label": "Campaigns", "value": "0" }
+      ],
+      "waitingOnFounder": ["Agents act only on founder ask"],
+      "order": 3
+    },
+    {
+      "id": "braj",
+      "name": "Braj Murliwala",
+      "short": "Braj",
+      "status": "active",
+      "summary": "Residential · Barsana and Vrindavan",
+      "url": null,
+      "headlines": [
+        { "label": "Pipeline", "value": "0" },
+        { "label": "Markets", "value": "2" },
+        { "label": "Campaigns", "value": "0" }
+      ],
+      "waitingOnFounder": [],
+      "order": 4
+    }
+  ],
+  "leads": [
+    {
+      "code": "SKY-PT-01",
+      "brand": "skybox",
+      "stage": "meet_booked",
+      "temperature": "hot",
+      "country": "PT",
+      "lastContactAt": "2026-11-14",
+      "createdAt": "2026-11-10T04:30:00.000Z",
+      "updatedAt": "2026-11-14T04:30:00.000Z"
+    },
+    {
+      "code": "SKY-CA-01",
+      "brand": "skybox",
+      "stage": "contacted",
+      "temperature": "hot",
+      "country": "CA",
+      "lastContactAt": "2026-11-13",
+      "createdAt": "2026-11-10T04:30:00.000Z",
+      "updatedAt": "2026-11-13T04:30:00.000Z"
+    },
+    {
+      "code": "SKY-US-01",
+      "brand": "skybox",
+      "stage": "contacted",
+      "temperature": "warm",
+      "country": "US",
+      "lastContactAt": "2026-11-12",
+      "createdAt": "2026-11-10T04:30:00.000Z",
+      "updatedAt": "2026-11-12T04:30:00.000Z"
+    },
+    {
+      "code": "SKY-GB-01",
+      "brand": "skybox",
+      "stage": "contacted",
+      "temperature": "warm",
+      "country": "GB",
+      "lastContactAt": "2026-11-12",
+      "createdAt": "2026-11-10T04:30:00.000Z",
+      "updatedAt": "2026-11-12T04:30:00.000Z"
+    },
+    {
+      "code": "SKY-PL-01",
+      "brand": "skybox",
+      "stage": "contacted",
+      "temperature": "warm",
+      "country": "PL",
+      "lastContactAt": "2026-11-12",
+      "createdAt": "2026-11-10T04:30:00.000Z",
+      "updatedAt": "2026-11-12T04:30:00.000Z"
+    },
+    {
+      "code": "SKY-XX-01",
+      "brand": "skybox",
+      "stage": "contacted",
+      "temperature": "warm",
+      "country": "XX",
+      "lastContactAt": "2026-11-12",
+      "createdAt": "2026-11-10T04:30:00.000Z",
+      "updatedAt": "2026-11-12T04:30:00.000Z"
+    }
+  ]
+}

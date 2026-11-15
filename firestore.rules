@@ -1,0 +1,85 @@
+rules_version = '2';
+
+// Public collections are world-readable. Writes require the verified founder
+// Google account. Directive text and the private tree (lead names, sources,
+// emails, phones) are readable and writable only by that same account.
+// Enforcement is here, not in the UI.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isFounder() {
+      return request.auth != null
+        && request.auth.token.email == 'luxsugerostudios@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+
+    function noContactOrMoneyFields() {
+      return !request.resource.data.keys().hasAny([
+        'email',
+        'phone',
+        'telephone',
+        'mobile',
+        'source',
+        'price',
+        'cost',
+        'amount',
+        'budget'
+      ]);
+    }
+
+    // Public lead cards are anonymous codes. Identity stays under private/.
+    function publicLeadIsAnonymous() {
+      return noContactOrMoneyFields()
+        && !request.resource.data.keys().hasAny([
+          'name',
+          'fullName',
+          'firstName',
+          'lastName'
+        ]);
+    }
+
+    match /people/{id} {
+      allow read: if true;
+      allow create, update: if isFounder() && noContactOrMoneyFields();
+      allow delete: if isFounder();
+    }
+
+    match /tasks/{id} {
+      allow read: if true;
+      allow create, update: if isFounder() && noContactOrMoneyFields();
+      allow delete: if isFounder();
+    }
+
+    match /agents/{id} {
+      allow read: if true;
+      allow create, update: if isFounder() && noContactOrMoneyFields();
+      allow delete: if isFounder();
+    }
+
+    match /brands/{id} {
+      allow read: if true;
+      allow create, update: if isFounder() && noContactOrMoneyFields();
+      allow delete: if isFounder();
+    }
+
+    match /leads/{id} {
+      allow read: if true;
+      allow create, update: if isFounder() && publicLeadIsAnonymous();
+      allow delete: if isFounder();
+    }
+
+    match /directives/{id} {
+      allow read, write: if isFounder();
+    }
+
+    // Lead PII document path: private/vault/leads/{code}
+    // (Firestore alternates collection/document, so `vault` is the parent doc.)
+    match /private/vault/leads/{code} {
+      allow read, write: if isFounder();
+    }
+
+    // The rest of the private tree is founder-only as well.
+    match /private/{document=**} {
+      allow read, write: if isFounder();
+    }
+  }
+}

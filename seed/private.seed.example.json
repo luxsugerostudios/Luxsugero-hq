@@ -1,0 +1,60 @@
+{
+  "private": {
+    "leads": [
+      {
+        "code": "SKY-PT-01",
+        "name": "Sample Contact A",
+        "country": "Portugal",
+        "source": "Sample form",
+        "note": "Sample meeting note",
+        "email": "",
+        "phone": ""
+      },
+      {
+        "code": "SKY-CA-01",
+        "name": "Sample Contact B",
+        "country": "Canada",
+        "source": "Sample referral",
+        "note": "Sample quantity note",
+        "email": "",
+        "phone": ""
+      },
+      {
+        "code": "SKY-US-01",
+        "name": "Sample Contact C",
+        "country": "United States",
+        "source": "Sample channel",
+        "note": "",
+        "email": "",
+        "phone": ""
+      },
+      {
+        "code": "SKY-GB-01",
+        "name": "Sample Contact D",
+        "country": "United Kingdom",
+        "source": "Sample intro",
+        "note": "",
+        "email": "",
+        "phone": ""
+      },
+      {
+        "code": "SKY-PL-01",
+        "name": "Sample Contact E",
+        "country": "Poland",
+        "source": "Sample intro",
+        "note": "",
+        "email": "",
+        "phone": ""
+      },
+      {
+        "code": "SKY-XX-01",
+        "name": "Sample Contact F",
+        "country": "",
+        "source": "Sample intro",
+        "note": "",
+        "email": "",
+        "phone": ""
+      }
+    ]
+  }
+}
