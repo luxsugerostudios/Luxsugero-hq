@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node --test src/lib/dates.test.ts src/lib/insights.test.ts src/lib/tasks.test.ts scripts/push-data.test.mjs",
+    "test": "node --test src/lib/dates.test.ts src/lib/insights.test.ts src/lib/tasks.test.ts src/lib/orbit.test.ts scripts/push-data.test.mjs",
     "test:rules": "firebase emulators:exec --only firestore --project demo-luxsugero \"node --test --test-concurrency=1 tests/firestore.rules.test.mjs\"",
     "check:seed": "node scripts/push-data.mjs --dry-run seed/seed.json && node scripts/push-data.mjs --dry-run seed/private.seed.example.json && node scripts/push-data.mjs --dry-run seed/roles.json",
     "push-data": "node scripts/push-data.mjs"
@@ -19,12 +19,14 @@
     "firebase": "^13.3.0",
     "firebase-admin": "^14.5.1",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "three": "^0.170.0"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^6.0.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.170.0",
     "@vitejs/plugin-react": "^6.3.0",
     "firebase-tools": "^15.36.0",
     "typescript": "^7.0.2",
