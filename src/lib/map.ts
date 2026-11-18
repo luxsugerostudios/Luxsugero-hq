@@ -85,6 +85,7 @@ export function mapTask(id: string, raw: unknown): Task | null {
     givenDate,
     dueDate: raw.dueDate == null ? null : dateOnly(raw.dueDate),
     status,
+    lane: raw.lane === "todo" || raw.lane === "doing" || raw.lane === "waiting" || raw.lane === "done" ? raw.lane : null,
     closedAt: raw.closedAt == null ? null : stamp(raw.closedAt),
     longTerm: raw.longTerm === true,
     flagAfterDays: flagAfterDays(raw.flagAfterDays),
@@ -239,6 +240,7 @@ export function readDashboard(raw: unknown): DashboardData {
     privateLeads: {},
     inbox: [],
     history: {},
+    pipelines: [],
   };
 }
 

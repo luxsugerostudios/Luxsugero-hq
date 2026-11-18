@@ -18,6 +18,9 @@ export type Temperature = (typeof TEMPERATURES)[number];
 export const TASK_STATUSES = ["open", "done"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
+export const LANES = ["todo", "doing", "waiting", "done"] as const;
+export type Lane = (typeof LANES)[number];
+
 export const DIRECTIVE_STATUSES = ["queued", "picked_up", "done"] as const;
 export type DirectiveStatus = (typeof DIRECTIVE_STATUSES)[number];
 
@@ -48,6 +51,7 @@ export type Task = {
   givenDate: string;
   dueDate: string | null;
   status: TaskStatus;
+  lane: Lane | null;
   closedAt: string | null;
   longTerm: boolean;
   flagAfterDays: number | null;
@@ -150,6 +154,19 @@ export type Directive = {
   updatedAt: string;
 };
 
+/** Stage counts written by the server-side Kraya sync. No lead names. */
+export type PipelineStage = { name: string; count: number };
+
+export type PipelineBoard = {
+  id: "skybox" | "fnh";
+  brand: "skybox" | "fnh";
+  source: "kraya";
+  account: string;
+  stages: PipelineStage[];
+  total: number;
+  syncedAt: string;
+};
+
 export type DashboardData = {
   people: Person[];
   tasks: Task[];
@@ -160,6 +177,7 @@ export type DashboardData = {
   privateLeads: Record<string, PrivateLead>;
   inbox: InboxItem[];
   history: Record<string, TaskHistory[]>;
+  pipelines: PipelineBoard[];
 };
 
 export const EMPTY_DASHBOARD: DashboardData = {
@@ -172,4 +190,5 @@ export const EMPTY_DASHBOARD: DashboardData = {
   privateLeads: {},
   inbox: [],
   history: {},
+  pipelines: [],
 };

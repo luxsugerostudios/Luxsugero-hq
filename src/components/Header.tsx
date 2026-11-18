@@ -1,20 +1,48 @@
+import { useState } from "react";
 import { useHqContext } from "../lib/hq";
 
 export function Header({
   theme,
   onToggleTheme,
+  showAssign = false,
+  onAssign,
 }: {
   theme: "light" | "dark";
   onToggleTheme: () => void;
+  showAssign?: boolean;
+  onAssign?: () => void;
 }) {
   const { configured, user, access, signIn, signOutUser } = useHqContext();
+  const [copied, setCopied] = useState(false);
   const role =
     access === "admin" ? "Admin" : access === "member" ? "Member" : access === "guest" ? "Not on the roster" : "Public";
 
   return (
     <div className="toolbar">
       <span className="role">{role}</span>
+      {showAssign && onAssign ? (
+        <button type="button" className="primary assign-top" onClick={onAssign}>
+          + Assign task
+        </button>
+      ) : null}
       {user?.email ? <span className="who">{user.email}</span> : null}
+      <button
+        type="button"
+        className="ghost"
+        onClick={() => {
+          const url = new URL(window.location.href);
+          url.hash = "#/public";
+          void navigator.clipboard.writeText(url.toString()).then(
+            () => {
+              setCopied(true);
+              window.setTimeout(() => setCopied(false), 1200);
+            },
+            () => undefined,
+          );
+        }}
+      >
+        {copied ? "Copied" : "Public view"}
+      </button>
       <button type="button" className="ghost" onClick={onToggleTheme}>
         {theme === "dark" ? "Light" : "Dark"}
       </button>

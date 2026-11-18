@@ -602,3 +602,28 @@ ul { margin: 8px 0 0; padding-left: 18px; }
   * { scroll-behavior: auto; transition: none !important; }
   .ticker-track, .orb { animation: none; }
 }
+
+.tag-groups { display: grid; gap: 12px; }
+.tag-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px 12px; }
+.burst { position: fixed; width: 0; height: 0; z-index: 30; pointer-events: none; }
+.burst i {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  animation: burst-out 0.6s ease-out forwards;
+}
+@keyframes burst-out {
+  to { transform: translate(var(--dx), var(--dy)); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .burst { display: none; }
+}
+.modal-back { position: fixed; inset: 0; z-index: 40; background: rgba(10, 10, 18, 0.45); display: grid; place-items: center; padding: 16px; }
+.modal-back .form { width: min(720px, 100%); max-height: 90vh; overflow: auto; }
+.assign-fab { display: none; }
+@media (max-width: 800px) {
+  .assign-top { display: none; }
+  .assign-fab { display: inline-flex; position: fixed; right: 16px; bottom: 16px; z-index: 25; }
+  .topbar .toolbar { flex-wrap: wrap; justify-content: flex-end; }
+}

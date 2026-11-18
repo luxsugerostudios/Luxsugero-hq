@@ -295,6 +295,8 @@ export class OrbitScene {
         node = this.makeNode(person.id, person.name, "crew", 2, "#ffffff");
         added = true;
       }
+      node.name = person.name;
+      node.label.textContent = person.name;
       node.count = person.count;
       node.glow.material.color.set(LOAD_COLOR[person.level]);
       node.mesh.scale.setScalar(0.8 + Math.min(person.count, 9) * 0.09);

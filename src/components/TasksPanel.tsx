@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { closedThisWeek, daysOpen, formatDay, isCarriedForward, isOverdue, kolkataDay } from "../lib/dates";
+import { burst } from "../lib/burst";
 import { useHqContext } from "../lib/hq";
-import { collapseOpenTasks, type ShownTask } from "../lib/tasks";
+import { orgSeat } from "../lib/orbit";
+import { collapseOpenTasks, taskLane, type ShownTask } from "../lib/tasks";
 import type { BrandId, Person, Task, TaskHistory } from "../lib/types";
 import { BRAND_IDS } from "../lib/types";
 
@@ -17,6 +19,14 @@ export function actorName(personId: string, people: Person[]): string {
   if (personId === "founder") return "Founder";
   if (personId === "admin") return "Admin";
   return people.find((person) => person.id === personId)?.name ?? personId;
+}
+
+function ownerLine(ownerId: string, people: Person[], agents: { id: string; name: string }[] = []): string {
+  const seat = orgSeat(ownerId);
+  if (seat) return `${seat.name} · ${seat.title}`;
+  const person = people.find((item) => item.id === ownerId);
+  if (person) return person.name;
+  return agents.find((agent) => agent.id === ownerId)?.name ?? actorName(ownerId, people);
 }
 
 export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
@@ -54,9 +64,6 @@ export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
       ? visible.filter((item) => item.task.ownerId === hq.personId)
       : [];
 
-  const shownPeople =
-    personFilter === "all" ? people : people.filter((person) => person.id === personFilter);
-
   if (mode === "mine") {
     const linked = hq.personId && hq.personId !== "founder" && hq.personId !== "admin";
     return (
@@ -88,7 +95,6 @@ export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
           Ask the founder to add your email.
         </p>
       ) : null}
-      {hq.isAdmin ? <AssignForm people={people} /> : null}
       <div className="toolbar filters">
         <label>
           Search
@@ -99,27 +105,18 @@ export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
             aria-label="Search tasks"
           />
         </label>
-        <label>
-          Brand
-          <select value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)}>
-            <option value="all">All brands</option>
-            <option value="none">No brand</option>
-            {BRAND_IDS.map((id) => (
-              <option key={id} value={id}>
-                {id}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Status
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-            <option value="all">All</option>
-            <option value="open">Open</option>
-            <option value="overdue">Overdue</option>
-            <option value="done">Done</option>
-          </select>
-        </label>
+      </div>
+      <div className="filters" role="group" aria-label="Filter by brand">
+        <FilterChip pressed={brandFilter === "all"} onClick={() => setBrandFilter("all")}>All brands</FilterChip>
+        {BRAND_IDS.map((id) => (
+          <FilterChip key={id} pressed={brandFilter === id} onClick={() => setBrandFilter(id)}>{id}</FilterChip>
+        ))}
+      </div>
+      <div className="filters" role="group" aria-label="Filter by status">
+        <FilterChip pressed={statusFilter === "all"} onClick={() => setStatusFilter("all")}>All</FilterChip>
+        <FilterChip pressed={statusFilter === "open"} onClick={() => setStatusFilter("open")}>Open</FilterChip>
+        <FilterChip pressed={statusFilter === "overdue"} onClick={() => setStatusFilter("overdue")}>Overdue</FilterChip>
+        <FilterChip pressed={statusFilter === "done"} onClick={() => setStatusFilter("done")}>Done</FilterChip>
       </div>
       <div className="filters" role="group" aria-label="Filter by person">
         <FilterChip pressed={personFilter === "all"} onClick={() => setPersonFilter("all")}>
@@ -136,27 +133,58 @@ export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
         ))}
       </div>
       <div className="kanban">
-        {shownPeople.map((person) => (
-          <PersonColumn
-            key={person.id}
-            person={person}
-            tasks={visible.filter((item) => item.task.ownerId === person.id)}
-            today={today}
-            people={people}
-            history={hq.data.history}
-            showAllDone={statusFilter === "done"}
-            dragOver={dragOver === person.id}
-            onDragOver={() => hq.isAdmin && setDragOver(person.id)}
-            onDragLeave={() => setDragOver(null)}
-            onDrop={(taskId) => {
-              setDragOver(null);
-              const task = hq.data.tasks.find((item) => item.id === taskId);
-              if (task && task.ownerId !== person.id) {
-                void hq.reassignTask(task, person.id).catch(() => undefined);
-              }
-            }}
-          />
-        ))}
+        {(["todo", "doing", "waiting", "done"] as const).map((lane) => {
+          const tasks = visible.filter(({ task }) => {
+            if (taskLane(task) !== lane) return false;
+            if (lane === "done" && statusFilter !== "done" && !closedThisWeek(task.status, task.closedAt, today)) return false;
+            return true;
+          });
+          const title = lane === "todo" ? "To do" : lane === "doing" ? "Doing" : lane === "waiting" ? "Waiting" : "Done";
+          return (
+            <article
+              key={lane}
+              className={`person${dragOver === lane ? " is-drop" : ""}`}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setDragOver(lane);
+              }}
+              onDragLeave={() => setDragOver(null)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDragOver(null);
+                const taskId = event.dataTransfer.getData("text/task-id");
+                const task = hq.data.tasks.find((item) => item.id === taskId);
+                if (!task || taskLane(task) === lane) return;
+                const mine = Boolean(hq.personId && task.ownerId === hq.personId);
+                if (!hq.isAdmin && !(hq.isMember && mine)) return;
+                void hq.placeTask(task, lane)
+                  .then(() => {
+                    if (lane === "done") burst(event.clientX, event.clientY);
+                  })
+                  .catch(() => undefined);
+              }}
+            >
+              <header>
+                <h3>{title}</h3>
+                <p className="meta">{tasks.length}</p>
+              </header>
+              {tasks.length === 0 ? <p className="empty">None</p> : null}
+              <div className="stack">
+                {tasks.map(({ task, duplicateIds }) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    duplicateIds={duplicateIds}
+                    today={today}
+                    people={people}
+                    history={hq.data.history[task.id] ?? []}
+                    showOwner
+                  />
+                ))}
+              </div>
+            </article>
+          );
+        })}
       </div>
     </section>
   );
@@ -193,11 +221,21 @@ function MyTasks({
   );
 }
 
-function AssignForm({ people }: { people: Person[] }) {
-  const { saveTask } = useHqContext();
+export function AssignModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="modal-back" role="presentation" onClick={onClose}>
+      <div role="dialog" aria-labelledby="assign-heading" onClick={(event) => event.stopPropagation()}>
+        <AssignForm onDone={onClose} />
+      </div>
+    </div>
+  );
+}
+
+function AssignForm({ onDone }: { onDone?: () => void }) {
+  const { data, saveTask } = useHqContext();
   const today = kolkataDay();
   const [title, setTitle] = useState("");
-  const [ownerId, setOwnerId] = useState(people[0]?.id ?? "unassigned");
+  const [ownerId, setOwnerId] = useState(data.people.find((person) => person.id !== "unassigned")?.id ?? "unassigned");
   const [dueDate, setDueDate] = useState("");
   const [brand, setBrand] = useState<"" | BrandId>("");
   const [longTerm, setLongTerm] = useState(false);
@@ -215,6 +253,7 @@ function AssignForm({ people }: { people: Person[] }) {
           givenDate: today,
           dueDate: dueDate || null,
           status: "open",
+          lane: "todo",
           closedAt: null,
           note: "",
           brand: brand || null,
@@ -227,25 +266,20 @@ function AssignForm({ people }: { people: Person[] }) {
           .then(() => {
             setTitle("");
             setLongTerm(false);
+            onDone?.();
           })
           .catch(() => undefined);
       }}
     >
-      <h3 className="wide">Assign task</h3>
+      <h3 id="assign-heading" className="wide">Assign task</h3>
       <label className="wide">
         Title
         <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={180} required />
       </label>
-      <label>
-        Owner
-        <select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}>
-          {people.map((person) => (
-            <option key={person.id} value={person.id}>
-              {person.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="wide">
+        <p className="meta">Owner</p>
+        <OwnerPicker value={ownerId} onChange={setOwnerId} />
+      </div>
       <label>
         Due
         <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
@@ -262,108 +296,56 @@ function AssignForm({ people }: { people: Person[] }) {
         </select>
       </label>
       <LongTermField checked={longTerm} onChange={setLongTerm} />
-      <button type="submit" className="primary">
-        Assign task
-      </button>
+      <div className="row">
+        <button type="submit" className="primary">Assign task</button>
+        {onDone ? <button type="button" className="ghost" onClick={onDone}>Close</button> : null}
+      </div>
     </form>
   );
 }
 
-function PersonColumn({
-  person,
-  tasks,
-  today,
-  people,
-  history,
-  showAllDone,
-  dragOver,
-  onDragOver,
-  onDragLeave,
-  onDrop,
-}: {
-  person: Person;
-  tasks: ShownTask[];
-  today: string;
-  people: Person[];
-  history: Record<string, TaskHistory[]>;
-  showAllDone: boolean;
-  dragOver: boolean;
-  onDragOver: () => void;
-  onDragLeave: () => void;
-  onDrop: (taskId: string) => void;
-}) {
-  const open = tasks.filter(
-    ({ task }) =>
-      task.status === "open" &&
-      !isOverdue(task.status, task.givenDate, today, task.flagAfterDays, task.longTerm),
-  );
-  const overdue = tasks.filter(({ task }) =>
-    isOverdue(task.status, task.givenDate, today, task.flagAfterDays, task.longTerm),
-  );
-  const done = tasks.filter(({ task }) =>
-    showAllDone ? task.status === "done" : closedThisWeek(task.status, task.closedAt, today),
-  );
+function OwnerPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+  const { data } = useHqContext();
+  const groups = [
+    {
+      label: "People",
+      options: data.people
+        .filter((person) => person.id !== "unassigned")
+        .map((person) => ({ id: person.id, label: orgSeat(person.id)?.name ?? person.name })),
+    },
+    {
+      label: "Brand PMs",
+      options: data.agents.filter((agent) => agent.group === "Brand PM").map((agent) => ({ id: agent.id, label: agent.name })),
+    },
+    {
+      label: "Agents",
+      options: data.agents.filter((agent) => agent.group !== "Brand PM").map((agent) => ({ id: agent.id, label: agent.name })),
+    },
+  ];
   return (
-    <article
-      className={`person${dragOver ? " is-drop" : ""}`}
-      onDragOver={(event) => {
-        event.preventDefault();
-        onDragOver();
-      }}
-      onDragLeave={onDragLeave}
-      onDrop={(event) => {
-        event.preventDefault();
-        onDrop(event.dataTransfer.getData("text/task-id"));
-      }}
-    >
-      <header>
-        <div>
-          <h3>{person.name}</h3>
-          {person.role ? <p className="role">{person.role}</p> : null}
-        </div>
-        <p className="meta">{open.length + overdue.length} open</p>
-      </header>
-      <Lane title="Open" tasks={open} today={today} people={people} history={history} />
-      <Lane title="Overdue" tasks={overdue} today={today} people={people} history={history} />
-      <Lane title="Done this week" tasks={done} today={today} people={people} history={history} />
-    </article>
-  );
-}
-
-function Lane({
-  title,
-  tasks,
-  today,
-  people,
-  history,
-}: {
-  title: string;
-  tasks: ShownTask[];
-  today: string;
-  people: Person[];
-  history: Record<string, TaskHistory[]>;
-}) {
-  return (
-    <div className="lane">
-      <p className="kicker">
-        {title} <span>{tasks.length}</span>
-      </p>
-      {tasks.length === 0 ? <p className="empty">None</p> : null}
-      <div className="stack">
-        {tasks.map(({ task, duplicateIds }) => (
-          <TaskCard
-            key={task.id}
-            task={task}
-            duplicateIds={duplicateIds}
-            today={today}
-            people={people}
-            history={history[task.id] ?? []}
-          />
-        ))}
-      </div>
+    <div className="tag-groups">
+      {groups.map((group) => (
+        <fieldset key={group.label}>
+          <legend>{group.label}</legend>
+          <div className="tag-grid">
+            {group.options.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className="chip"
+                aria-pressed={value === option.id}
+                onClick={() => onChange(option.id)}
+              >
+                {option.label.slice(0, 1)} {option.label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      ))}
     </div>
   );
 }
+
 
 function TaskCard({
   task,
@@ -372,6 +354,7 @@ function TaskCard({
   people,
   history,
   emphasis = false,
+  showOwner = false,
 }: {
   task: Task;
   duplicateIds?: string[];
@@ -379,8 +362,10 @@ function TaskCard({
   people: Person[];
   history: TaskHistory[];
   emphasis?: boolean;
+  showOwner?: boolean;
 }) {
-  const { isAdmin, isMember, personId, setTaskStatus, setTaskNote, deleteTask, saveTask } = useHqContext();
+  const { isAdmin, isMember, personId, setTaskStatus, setTaskNote, deleteTask, saveTask, reassignTask, data } = useHqContext();
+  const [picking, setPicking] = useState(false);
   const [note, setNote] = useState(task.note);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
@@ -400,12 +385,13 @@ function TaskCard({
     setDueDate(task.dueDate ?? "");
   }, [task.status, task.note, task.title, task.dueDate, task.updatedAt]);
 
-  async function tick(next: Task["status"]) {
+  async function tick(next: Task["status"], point?: { x: number; y: number }) {
     setLocalStatus(next);
     setSaved(false);
     try {
       await setTaskStatus(task, next);
       setSaved(true);
+      if (next === "done" && point) burst(point.x, point.y);
       window.setTimeout(() => setSaved(false), 1200);
     } catch {
       setLocalStatus(null);
@@ -414,9 +400,9 @@ function TaskCard({
   return (
     <article
       className={`task${overdue ? " is-overdue" : ""}${status === "done" ? " is-done" : ""}${emphasis ? " is-emphasis" : ""}`}
-      draggable={isAdmin}
+      draggable={canTick}
       onDragStart={(event) => {
-        if (!isAdmin) return;
+        if (!canTick) return;
         event.dataTransfer.setData("text/task-id", task.id);
         event.dataTransfer.effectAllowed = "move";
       }}
@@ -453,11 +439,29 @@ function TaskCard({
         )}
         {task.longTerm ? <span className="long-term">Long-term</span> : null}
         <p className="meta">
+          {showOwner ? (
+            isAdmin ? (
+              <button type="button" className="chip" onClick={() => setPicking((open) => !open)}>
+                {ownerLine(task.ownerId, people, data.agents)}
+              </button>
+            ) : (
+              `${ownerLine(task.ownerId, people, data.agents)} · `
+            )
+          ) : null}
           Given {formatDay(task.givenDate)}
           {task.brand ? ` · ${task.brand}` : ""}
           {task.dueDate ? ` · Due ${formatDay(task.dueDate)}` : ""}
         </p>
         {task.note ? <p className="focus">{task.note}</p> : null}
+        {picking && isAdmin ? (
+          <OwnerPicker
+            value={task.ownerId}
+            onChange={(ownerId) => {
+              setPicking(false);
+              if (ownerId !== task.ownerId) void reassignTask(task, ownerId).catch(() => undefined);
+            }}
+          />
+        ) : null}
       </div>
       {status === "open" ? (
         <p className="age">
@@ -472,7 +476,7 @@ function TaskCard({
       {canTick ? (
         <div className="row">
           {status === "open" ? (
-            <button type="button" className="tick" onClick={() => void tick("done")}>
+            <button type="button" className="tick" onClick={(event) => void tick("done", { x: event.clientX, y: event.clientY })}>
               Done
             </button>
           ) : (

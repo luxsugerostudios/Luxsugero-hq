@@ -132,6 +132,14 @@ beforeEach(async () => {
       summary: "Opened",
       at: STAMP,
     });
+    await setDoc(doc(db, "pipeline/skybox"), {
+      brand: "skybox",
+      source: "kraya",
+      account: "Skyboxbylux",
+      stages: [{ name: "New Lead", count: 2 }],
+      total: 2,
+      syncedAt: STAMP,
+    });
   });
 });
 
@@ -311,6 +319,43 @@ test("admins can reassign, close, and delete main-bucket requests", async () => 
     raisedBy: "hari-om",
     assignees: ["debo"],
   })));
+});
+
+test("team can read Kraya counts and only an admin can publish the public snapshot", async () => {
+  const snapshot = {
+    publishedAt: STAMP,
+    open: 1,
+    overdue: 0,
+    shippedThisWeek: 0,
+    brands: [],
+    crew: [],
+    tasks: [],
+    orbit: { agents: [], crew: [], unowned: 0 },
+    pipeline: [{ brand: "Skybox", total: 2, syncedAt: "", stages: [{ name: "New Lead", count: 2 }] }],
+  };
+  await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), "pipeline/skybox")));
+  await assertFails(getDoc(doc(authed(GUEST).firestore(), "pipeline/skybox")));
+  await assertSucceeds(getDoc(doc(authed(DEBO).firestore(), "pipeline/skybox")));
+  await assertSucceeds(getDoc(doc(authed(HARI).firestore(), "pipeline/skybox")));
+  await assertFails(setDoc(doc(authed(DEBO).firestore(), "pipeline/fnh"), { source: "kraya" }));
+  await assertFails(setDoc(doc(authed(FOUNDER).firestore(), "pipeline/skybox"), { source: "kraya", total: 1 }));
+  await assertSucceeds(setDoc(doc(authed(FOUNDER).firestore(), "public/snapshot"), snapshot));
+  await assertSucceeds(getDoc(doc(env.unauthenticatedContext().firestore(), "public/snapshot")));
+  await assertFails(setDoc(doc(authed(DEBO).firestore(), "public/snapshot"), snapshot));
+  await assertFails(setDoc(doc(authed(FOUNDER).firestore(), "public/snapshot"), { ...snapshot, email: FOUNDER }));
+  const member = authed(DEBO).firestore();
+  await assertSucceeds(updateDoc(doc(member, "tasks/t-debo"), {
+    status: "open",
+    lane: "doing",
+    closedAt: null,
+    updatedAt: STAMP,
+  }));
+  await assertFails(updateDoc(doc(member, "tasks/t-shrishti"), {
+    status: "open",
+    lane: "doing",
+    closedAt: null,
+    updatedAt: STAMP,
+  }));
 });
 
 test("history stays public and immutable", async () => {

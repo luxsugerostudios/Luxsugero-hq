@@ -53,6 +53,10 @@ service cloud.firestore {
       return isFounder() || isListedAdmin();
     }
 
+    function isTeam() {
+      return isFounder() || isListedAdmin() || isMember();
+    }
+
     function noSecretKeys() {
       return !request.resource.data.keys().hasAny([
         'email',
@@ -116,7 +120,8 @@ service cloud.firestore {
         && request.resource.data.ownerId == resource.data.ownerId
         && request.resource.data.status in ['open', 'done']
         && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'closedAt', 'updatedAt', 'note'])
+            .hasOnly(['status', 'closedAt', 'updatedAt', 'note', 'lane'])
+        && (!('lane' in request.resource.data) || request.resource.data.lane in ['todo', 'doing', 'waiting', 'done'])
         && taskTextSafe();
     }
 
@@ -291,6 +296,31 @@ service cloud.firestore {
           && resource.data.members[request.auth.token.email].size() > 0);
       allow list: if false;
       allow create, update, delete: if isFounder();
+    }
+
+    match /pipeline/{document=**} {
+      allow read: if isTeam();
+      allow write: if false;
+    }
+
+    match /public/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin() && publicSnapshotSafe();
+      allow delete: if isAdmin();
+    }
+
+    function publicSnapshotSafe() {
+      return request.resource.data.keys().hasOnly([
+          'publishedAt', 'open', 'overdue', 'shippedThisWeek', 'brands', 'crew', 'tasks', 'orbit', 'pipeline', 'insights'
+        ])
+        && request.resource.data.publishedAt is string
+        && request.resource.data.publishedAt.size() < 40
+        && !request.resource.data.publishedAt.matches('.*@.*')
+        && request.resource.data.open is int
+        && request.resource.data.overdue is int
+        && request.resource.data.shippedThisWeek is int
+        && request.resource.data.pipeline is list
+        && request.resource.data.pipeline.size() <= 4;
     }
 
     match /inbox/{id} {

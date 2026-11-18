@@ -1,9 +1,34 @@
 import { useState } from "react";
 import { formatDay, kolkataDay } from "../lib/dates";
 import { useHqContext } from "../lib/hq";
+import { orgSeat } from "../lib/orbit";
 import { actorName } from "./TasksPanel";
-import type { BrandId, InboxItem } from "../lib/types";
+import type { Agent, BrandId, InboxItem, Person } from "../lib/types";
 import { BRAND_IDS } from "../lib/types";
+
+function tagGroups(people: Person[], agents: Agent[]) {
+  const humans = people.filter((person) => person.id !== "unassigned");
+  return [
+    {
+      label: "People",
+      ids: humans.map((person) => ({
+        id: person.id,
+        label: orgSeat(person.id)?.name ?? person.name,
+      })),
+    },
+    {
+      label: "Brand PMs",
+      ids: agents.filter((agent) => agent.group === "Brand PM").map((agent) => ({ id: agent.id, label: agent.name })),
+    },
+    {
+      label: "Departments",
+      ids: [
+        { id: "HQ", label: "HQ" },
+        ...agents.filter((agent) => agent.group !== "Brand PM").map((agent) => ({ id: agent.id, label: agent.name })),
+      ],
+    },
+  ];
+}
 
 export function InboxPanel() {
   const hq = useHqContext();
@@ -62,15 +87,6 @@ function RequestForm() {
   const [dueDate, setDueDate] = useState("");
   const [brand, setBrand] = useState<"" | BrandId>("");
   const [tags, setTags] = useState<string[]>(["HQ"]);
-  const people = data.people.filter((person) => person.id !== "everyone" && person.id !== "unassigned");
-  const choices = ["HQ", ...people.map((person) => person.id), ...data.agents.map((agent) => agent.id)];
-
-  function label(id: string) {
-    if (id === "HQ") return "HQ";
-    return data.people.find((person) => person.id === id)?.name
-      ?? data.agents.find((agent) => agent.id === id)?.name
-      ?? id;
-  }
 
   return (
     <form
@@ -111,23 +127,7 @@ function RequestForm() {
         Details
         <textarea value={details} onChange={(event) => setDetails(event.target.value)} rows={3} maxLength={4000} required />
       </label>
-      <fieldset className="wide tags">
-        <legend>Tag</legend>
-        {choices.map((id) => (
-          <label key={id} className="check">
-            <input
-              type="checkbox"
-              checked={tags.includes(id)}
-              onChange={(event) =>
-                setTags((current) =>
-                  event.target.checked ? [...current, id] : current.filter((item) => item !== id),
-                )
-              }
-            />
-            {label(id)}
-          </label>
-        ))}
-      </fieldset>
+      <TagGroups groups={tagGroups(data.people, data.agents)} tags={tags} onChange={setTags} />
       <label>
         Due
         <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
@@ -162,8 +162,6 @@ function RequestCard({ item }: { item: InboxItem }) {
   );
   const raised = item.raisedBy === hq.personId;
   const canRespond = hq.isAdmin || ((hq.isMember || hq.isAdmin) && (tagged || raised));
-  const people = hq.data.people.filter((person) => person.id !== "everyone" && person.id !== "unassigned");
-
   function tagLabel(id: string) {
     if (id === "HQ") return "HQ";
     return actorName(id, hq.data.people) === id
@@ -232,23 +230,7 @@ function RequestCard({ item }: { item: InboxItem }) {
               Close
             </button>
           </div>
-          <fieldset className="tags">
-            <legend>Reassign</legend>
-            {["HQ", ...people.map((person) => person.id), ...hq.data.agents.map((agent) => agent.id)].map((id) => (
-              <label key={id} className="check">
-                <input
-                  type="checkbox"
-                  checked={tags.includes(id)}
-                  onChange={(event) =>
-                    setTags((current) =>
-                      event.target.checked ? [...current, id] : current.filter((itemId) => itemId !== id),
-                    )
-                  }
-                />
-                {tagLabel(id)}
-              </label>
-            ))}
-          </fieldset>
+          <TagGroups groups={tagGroups(hq.data.people, hq.data.agents)} tags={tags} onChange={setTags} />
           <button
             type="button"
             className="ghost"
@@ -284,5 +266,62 @@ function RequestCard({ item }: { item: InboxItem }) {
       ) : null}
       <p className="meta">Added {item.createdAt ? formatDay(item.createdAt.slice(0, 10)) : kolkataDay()}</p>
     </article>
+  );
+}
+
+function TagGroups({
+  groups,
+  tags,
+  onChange,
+}: {
+  groups: { label: string; ids: { id: string; label: string }[] }[];
+  tags: string[];
+  onChange: (tags: string[]) => void;
+}) {
+  return (
+    <div className="tag-groups wide">
+      {groups.map((group) => {
+        const ids = group.ids.map((item) => item.id);
+        const allOn = ids.length > 0 && ids.every((id) => tags.includes(id));
+        return (
+          <fieldset key={group.label}>
+            <legend>
+              {group.label}{" "}
+              <button
+                type="button"
+                className="ghost"
+                onClick={() =>
+                  onChange(
+                    allOn
+                      ? tags.filter((id) => !ids.includes(id))
+                      : [...new Set([...tags, ...ids])],
+                  )
+                }
+              >
+                {allOn ? "Clear" : "All"}
+              </button>
+            </legend>
+            <div className="tag-grid">
+              {group.ids.map((item) => (
+                <label key={item.id} className="check">
+                  <input
+                    type="checkbox"
+                    checked={tags.includes(item.id)}
+                    onChange={(event) =>
+                      onChange(
+                        event.target.checked
+                          ? [...tags, item.id]
+                          : tags.filter((id) => id !== item.id),
+                      )
+                    }
+                  />
+                  {item.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        );
+      })}
+    </div>
   );
 }

@@ -38,3 +38,11 @@ export function collapseOpenTasks(tasks: Task[]): ShownTask[] {
 export function visibleTasks(tasks: Task[]): Task[] {
   return collapseOpenTasks(tasks).map((item) => item.task);
 }
+
+export type BoardLane = "todo" | "doing" | "waiting" | "done";
+
+export function taskLane(task: Pick<Task, "status" | "lane">): BoardLane {
+  if (task.status === "done") return "done";
+  if (task.lane === "doing" || task.lane === "waiting") return task.lane;
+  return "todo";
+}
