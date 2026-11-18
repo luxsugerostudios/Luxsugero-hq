@@ -6,11 +6,13 @@ export function Header({
   onToggleTheme,
   showAssign = false,
   onAssign,
+  onSearch,
 }: {
   theme: "light" | "dark";
   onToggleTheme: () => void;
   showAssign?: boolean;
   onAssign?: () => void;
+  onSearch?: () => void;
 }) {
   const { configured, user, access, signIn, signOutUser } = useHqContext();
   const [copied, setCopied] = useState(false);
@@ -20,6 +22,18 @@ export function Header({
   return (
     <div className="toolbar">
       <span className="role">{role}</span>
+      {onSearch ? <button type="button" className="ghost" onClick={onSearch}>Search</button> : null}
+      <button
+        type="button"
+        className="ghost"
+        onClick={() => {
+          const next = document.documentElement.dataset.density === "compact" ? "comfortable" : "compact";
+          document.documentElement.dataset.density = next;
+          try { localStorage.setItem("hq-density", next); } catch { /* ignore */ }
+        }}
+      >
+        {document.documentElement.dataset.density === "compact" ? "Comfortable" : "Compact"}
+      </button>
       {showAssign && onAssign ? (
         <button type="button" className="primary assign-top" onClick={onAssign}>
           + Assign task

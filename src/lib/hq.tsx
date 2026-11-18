@@ -93,7 +93,7 @@ export type HqValue = {
   reassignTask: (task: Task, ownerId: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   createInbox: (item: InboxItem) => Promise<void>;
-  updateInbox: (id: string, patch: Partial<Pick<InboxItem, "status" | "response" | "note" | "assignees" | "taskId">>) => Promise<void>;
+  updateInbox: (id: string, patch: Partial<Pick<InboxItem, "status" | "response" | "note" | "assignees" | "taskId" | "dueDate">>) => Promise<void>;
   acceptInbox: (item: InboxItem) => Promise<void>;
   convertInbox: (item: InboxItem, ownerId: string) => Promise<void>;
   saveLead: (lead: Lead, privateLead: PrivateLead | null) => Promise<void>;
@@ -655,6 +655,7 @@ export function HqProvider({ children }: { children: ReactNode }) {
         if ("note" in patch) next.note = patch.note;
         if (isAdmin && patch.assignees) next.assignees = patch.assignees;
         if (isAdmin && "taskId" in patch) next.taskId = patch.taskId;
+        if (isAdmin && "dueDate" in patch) next.dueDate = patch.dueDate;
         await updateDoc(doc(services.db, "inbox", id), next).catch((error: unknown) => {
           setActionError(readable(error));
           throw error;
