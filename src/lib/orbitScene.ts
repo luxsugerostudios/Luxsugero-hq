@@ -122,6 +122,37 @@ export class OrbitScene {
   private drag: { x: number; y: number; theta: number; phi: number; mouse: boolean } | null = null;
   private hovered: Node | null = null;
   private filter: OrbitFilter = "all";
+  /** "people": only human names (plus HQ) stay labelled; agents show on hover or pin. */
+  private labelMode: "all" | "people" = "all";
+  private pinnedId: string | null = null;
+
+  setLabelMode(mode: "all" | "people") {
+    this.labelMode = mode;
+  }
+
+  setPinned(id: string | null) {
+    this.pinnedId = id;
+  }
+
+  /** Map-marker style pill: dot, name, open count, and a corner badge when stretched. */
+  private richCrewLabel(label: HTMLDivElement, person: OrbitCrew) {
+    label.replaceChildren();
+    label.classList.add("rich", `lv-${person.level}`);
+    for (const level of ["room", "steady", "busy", "overloaded"]) {
+      if (level !== person.level) label.classList.remove(`lv-${level}`);
+    }
+    const dot = document.createElement("i");
+    const name = document.createElement("b");
+    name.textContent = person.name;
+    const count = document.createElement("span");
+    count.textContent = ` · ${person.count} open`;
+    label.append(dot, name, count);
+    if (person.level === "overloaded" || person.level === "room") {
+      const badge = document.createElement("em");
+      badge.textContent = person.level === "overloaded" ? "Overloaded" : "Has room";
+      label.append(badge);
+    }
+  }
   private paused = false;
   private beamClock = 0;
   private reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -296,7 +327,8 @@ export class OrbitScene {
         added = true;
       }
       node.name = person.name;
-      node.label.textContent = person.name;
+      if (this.labelMode === "people") this.richCrewLabel(node.label, person);
+      else node.label.textContent = person.name;
       node.count = person.count;
       node.glow.material.color.set(LOAD_COLOR[person.level]);
       node.mesh.scale.setScalar(0.8 + Math.min(person.count, 9) * 0.09);
@@ -392,8 +424,26 @@ export class OrbitScene {
     if (!w || !h) return;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
+    const { left, right, top, bottom } = this.insets;
+    if (left || right || top || bottom) {
+      // Centre the orbit in the area left free by floating panels.
+      this.camera.setViewOffset(w, h, (right - left) / 2, (bottom - top) / 2, w, h);
+    } else {
+      this.camera.clearViewOffset();
+    }
     this.camera.updateProjectionMatrix();
-    this.tDist = w < 640 ? 66 : 40;
+    const free = Math.max(320, w - left - right);
+    this.tDist = free < 640 ? 66 : free < 900 ? 50 : 40;
+  }
+
+  private insets = { left: 0, right: 0, top: 0, bottom: 0 };
+
+  /** Pixels covered by overlays on each side; the orbit centres in what is left. */
+  setInsets(insets: { left: number; right: number; top: number; bottom: number }) {
+    const same = (Object.keys(insets) as (keyof typeof insets)[]).every((key) => insets[key] === this.insets[key]);
+    if (same) return;
+    this.insets = { ...insets };
+    this.resize();
   }
 
   private hit(event: PointerEvent): THREE.Object3D | null {
@@ -593,7 +643,10 @@ export class OrbitScene {
       const x = ((v.x + 1) / 2) * w;
       const y = ((1 - v.y) / 2) * h;
       const depth = Math.max(0.35, Math.min(1, 1.6 - v.z));
-      const hide = w < 640 && node.kind === "dept" && node !== this.hovered;
+      const focused = node === this.hovered || node.id === this.pinnedId;
+      const quietAgent =
+        this.labelMode === "people" && this.filter !== "ai" && (node.kind === "dept" || node.kind === "brand");
+      const hide = !focused && (quietAgent || (w < 640 && node.kind === "dept"));
       node.label.style.opacity = hide ? "0" : String(depth);
       node.label.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
     }
