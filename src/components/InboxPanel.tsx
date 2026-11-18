@@ -157,6 +157,9 @@ function RequestCard({ item }: { item: InboxItem }) {
   const [note, setNote] = useState(item.note ?? "");
   const [tags, setTags] = useState(item.assignees);
   const tagged = Boolean(hq.personId && item.assignees.includes(hq.personId));
+  const alreadyOpen = Boolean(
+    item.taskId || hq.data.tasks.some((task) => task.inboxId === item.id && task.status === "open"),
+  );
   const raised = item.raisedBy === hq.personId;
   const canRespond = hq.isAdmin || ((hq.isMember || hq.isAdmin) && (tagged || raised));
   const people = hq.data.people.filter((person) => person.id !== "everyone" && person.id !== "unassigned");
@@ -183,11 +186,14 @@ function RequestCard({ item }: { item: InboxItem }) {
       <p className="meta">Tagged {item.assignees.map(tagLabel).join(", ")}</p>
       {item.response ? <p className="response">{item.response}</p> : null}
       {item.note ? <p className="focus">{item.note}</p> : null}
+      {alreadyOpen ? <p className="meta">Already a task. It is not counted twice.</p> : null}
       {hq.isMember && tagged && item.status !== "done" ? (
         <div className="row">
-          <button type="button" className="tick" onClick={() => void hq.acceptInbox(item).catch(() => undefined)}>
-            Accept
-          </button>
+          {item.status === "new" && !alreadyOpen ? (
+            <button type="button" className="tick" onClick={() => void hq.acceptInbox(item).catch(() => undefined)}>
+              Accept
+            </button>
+          ) : null}
           <button
             type="button"
             className="tick ghost"
@@ -210,8 +216,13 @@ function RequestCard({ item }: { item: InboxItem }) {
             </select>
           </label>
           <div className="row">
-            <button type="button" className="primary" onClick={() => void hq.convertInbox(item, ownerId).catch(() => undefined)}>
-              Convert to task
+            <button
+              type="button"
+              className="primary"
+              disabled={alreadyOpen}
+              onClick={() => void hq.convertInbox(item, ownerId).catch(() => undefined)}
+            >
+              {alreadyOpen ? "Already a task" : "Convert to task"}
             </button>
             <button
               type="button"

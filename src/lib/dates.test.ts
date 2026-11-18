@@ -32,6 +32,12 @@ test("a task given today is not carried or overdue", () => {
   assert.equal(isCarriedForward("open", "2026-11-10", "2026-11-10"), false);
 });
 
+test("a long-term task without a custom day count flags after 7 days", () => {
+  assert.equal(isOverdue("open", "2026-11-10", "2026-11-16", null, true), false);
+  assert.equal(isOverdue("open", "2026-11-10", "2026-11-17", null, true), false);
+  assert.equal(isOverdue("open", "2026-11-10", "2026-11-18", null, true), true);
+});
+
 test("flagAfterDays replaces the 3-day overdue line", () => {
   assert.equal(isOverdue("open", "2026-11-10", "2026-11-15", 7), false);
   assert.equal(isOverdue("open", "2026-11-10", "2026-11-17", 7), false);
