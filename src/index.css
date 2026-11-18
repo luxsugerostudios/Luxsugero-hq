@@ -603,6 +603,28 @@ ul { margin: 8px 0 0; padding-left: 18px; }
   .ticker-track, .orb { animation: none; }
 }
 
+.orbit-hero .stage { height: 75vh; min-height: 560px; }
+.orbit-caption {
+  position: absolute;
+  left: 16px;
+  top: 64px;
+  z-index: 2;
+  display: grid;
+  gap: 8px;
+  max-width: min(520px, calc(100% - 32px));
+  pointer-events: none;
+}
+.orbit-caption p { margin: 0; font-family: var(--display); font-weight: 700; font-size: 22px; letter-spacing: -0.02em; color: #f4f4f8; }
+.orbit-caption .row { display: flex; flex-wrap: wrap; gap: 8px; }
+.orbit-caption .pillbtn { pointer-events: none; }
+.orbit-hero .orbit-panel { position: absolute; width: min(310px, calc(100% - 32px)); }
+.orbit-hero .stage:has(.orbit-panel) { height: 75vh; min-height: 560px; padding-top: 0; }
+.orbit-hero .stage:has(.orbit-panel) .orbit-canvas,
+.orbit-hero .stage:has(.orbit-panel) .orbit-labels { height: 100%; bottom: 0; }
+@media (max-width: 800px) {
+  .orbit-hero .stage,
+  .orbit-hero .stage:has(.orbit-panel) { height: 70vh; min-height: 420px; }
+}
 .tag-groups { display: grid; gap: 12px; }
 .tag-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px 12px; }
 .burst { position: fixed; width: 0; height: 0; z-index: 30; pointer-events: none; }

@@ -7,8 +7,10 @@ import { loadSeed } from "../lib/map";
 import { BRAND_COLOR, LOAD_LABEL, loadLevel } from "../lib/orbit";
 import type { OrbitAgent, OrbitCrew, OrbitFilter, OrbitScene } from "../lib/orbitScene";
 import { buildPublicSnapshot, type PublicSnapshot } from "../lib/publicSnapshot";
+import { OrbitCaption } from "./AgentOrbit";
 
 const KIND_COLOR = { hq: "#c6ff3d", brand: "#3de8ff", dept: "#5b5bff" } as const;
+const orbitScenePromise = import("../lib/orbitScene");
 
 export function PublicView() {
   const [snapshot, setSnapshot] = useState<PublicSnapshot | null>(null);
@@ -185,6 +187,7 @@ function PublicOrbit({ snapshot }: { snapshot: PublicSnapshot }) {
   const [failed, setFailed] = useState(false);
   const [filter, setFilter] = useState<OrbitFilter>("all");
   const [paused, setPaused] = useState(false);
+  const [picked, setPicked] = useState<string | null>(null);
 
   const agents = useMemo<OrbitAgent[]>(() => {
     const ids = snapshot.orbit.agents.map((agent, index) => [`${agent.name}`, `a${index}`] as const);
@@ -216,13 +219,13 @@ function PublicOrbit({ snapshot }: { snapshot: PublicSnapshot }) {
   useEffect(() => {
     let disposed = false;
     let scene: OrbitScene | null = null;
-    import("../lib/orbitScene")
+    orbitScenePromise
       .then(({ OrbitScene }) => {
         if (disposed || !canvasRef.current || !labelsRef.current) return;
         scene = new OrbitScene(canvasRef.current, labelsRef.current, {
-          onNode: () => undefined,
+          onNode: (id) => setPicked(id),
           onComet: () => undefined,
-          onEmpty: () => undefined,
+          onEmpty: () => setPicked(null),
         });
         sceneRef.current = scene;
         setReady(true);
@@ -251,12 +254,17 @@ function PublicOrbit({ snapshot }: { snapshot: PublicSnapshot }) {
     sceneRef.current?.setPaused(paused);
   }, [paused, ready]);
 
+  const pickedAgent = picked?.startsWith("a") ? snapshot.orbit.agents[Number(picked.slice(1))] : null;
+  const pickedCrew = picked?.startsWith("c") ? snapshot.orbit.crew[Number(picked.slice(1))] : null;
+
   return (
-    <div className="orbit-wrap">
+    <div className="orbit-wrap orbit-hero">
       <div className="stage">
         <canvas ref={canvasRef} className="orbit-canvas" aria-label="View-only map of the team and agents. Drag to rotate." />
         <div ref={labelsRef} className="orbit-labels" aria-hidden="true" />
+        {!ready && !failed ? <p className="orbit-fallback">Loading the orbit…</p> : null}
         {failed ? <p className="orbit-fallback">The 3D view could not start. The lists below have the same names.</p> : null}
+        <OrbitCaption open={snapshot.open} overdue={snapshot.overdue} shipped={snapshot.shippedThisWeek} />
         <div className="orbit-ctrls">
           {(["all", "ai", "crew"] as const).map((item) => (
             <button key={item} type="button" className="pillbtn" aria-pressed={filter === item} onClick={() => setFilter(item)}>
@@ -276,6 +284,31 @@ function PublicOrbit({ snapshot }: { snapshot: PublicSnapshot }) {
           <span><i style={{ background: "var(--lime)" }} />{LOAD_LABEL.steady}</span>
           <span><i style={{ background: "var(--pink)" }} />No owner</span>
         </div>
+        {pickedAgent || pickedCrew ? (
+          <aside className="orbit-panel" aria-live="polite">
+            <button type="button" className="pillbtn close" onClick={() => setPicked(null)}>Close</button>
+            {pickedCrew ? (
+              <>
+                <p className="meta">Human{pickedCrew.title ? ` · ${pickedCrew.title}` : ""}</p>
+                <h3>{pickedCrew.name}</h3>
+                <dl>
+                  <dt>Open tasks</dt><dd>{pickedCrew.open}</dd>
+                </dl>
+              </>
+            ) : pickedAgent ? (
+              <>
+                <p className="meta">AI agent</p>
+                <h3>{pickedAgent.name}</h3>
+                <span className="state" style={{ background: "var(--lime)" }}>{pickedAgent.state}</span>
+                {pickedAgent.reportsTo ? (
+                  <dl>
+                    <dt>Reports to</dt><dd>{pickedAgent.reportsTo}</dd>
+                  </dl>
+                ) : null}
+              </>
+            ) : null}
+          </aside>
+        ) : null}
       </div>
     </div>
   );

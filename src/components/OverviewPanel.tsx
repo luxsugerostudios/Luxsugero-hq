@@ -92,7 +92,7 @@ export function OverviewPanel() {
 
   return (
     <section aria-labelledby="overview-heading" className="pulse">
-      <AgentOrbit />
+      <AgentOrbit hero />
       <Ticker signals={signals} />
       <div className="section-head big-head">
         <h2 id="overview-heading">Studio pulse</h2>

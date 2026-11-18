@@ -22,6 +22,8 @@ import type { OrbitAgent, OrbitCrew, OrbitFilter, OrbitScene } from "../lib/orbi
 import { visibleTasks } from "../lib/tasks";
 import { actorName } from "./TasksPanel";
 
+const orbitScenePromise = import("../lib/orbitScene");
+
 type Panel = { kind: "node"; id: string } | { kind: "plan"; plan: Assignment[] } | null;
 
 const STATE_SWATCH: Record<string, string> = {
@@ -32,7 +34,7 @@ const STATE_SWATCH: Record<string, string> = {
   sync: "#4a4a62",
 };
 
-export function AgentOrbit() {
+export function AgentOrbit({ hero = false }: { hero?: boolean }) {
   const { data, isAdmin, reassignTask } = useHqContext();
   const today = kolkataDay();
   const tasks = visibleTasks(data.tasks);
@@ -105,7 +107,7 @@ export function AgentOrbit() {
   useEffect(() => {
     let disposed = false;
     let scene: OrbitScene | null = null;
-    import("../lib/orbitScene")
+    orbitScenePromise
       .then(({ OrbitScene }) => {
         if (disposed || !canvasRef.current || !labelsRef.current) return;
         scene = new OrbitScene(canvasRef.current, labelsRef.current, {
@@ -204,12 +206,18 @@ export function AgentOrbit() {
       ? "Drag to spin. Click a pink shard (a task with no owner), then click a crew member."
       : "Drag to spin. Every open task has an owner.";
 
+  const overdueCount = insights.overdueByPerson.reduce((sum, row) => sum + row.count, 0);
+
   return (
-    <div className="orbit-wrap">
+    <div className={hero ? "orbit-wrap orbit-hero" : "orbit-wrap"}>
       <div className="stage">
         <canvas ref={canvasRef} className="orbit-canvas" aria-label="3D map of the team and AI agents. Drag to rotate. Use the list below for a text version." />
         <div ref={labelsRef} className="orbit-labels" aria-hidden="true" />
+        {!ready && !failed ? <p className="orbit-fallback">Loading the orbit…</p> : null}
         {failed ? <p className="orbit-fallback">The 3D view could not start in this browser. The agent list below has everything.</p> : null}
+        {hero ? (
+          <OrbitCaption open={insights.openCount} overdue={overdueCount} shipped={insights.closedThisWeek} />
+        ) : null}
         <div className="orbit-ctrls">
           {(["all", "ai", "crew"] as const).map((item) => (
             <button key={item} type="button" className="pillbtn" aria-pressed={filter === item} onClick={() => setFilter(item)}>
@@ -264,6 +272,19 @@ export function AgentOrbit() {
         ) : null}
       </div>
       {note ? <p className="orbit-note" role="status">{note}</p> : null}
+    </div>
+  );
+}
+
+export function OrbitCaption({ open, overdue, shipped }: { open: number; overdue: number; shipped: number }) {
+  return (
+    <div className="orbit-caption">
+      <p>Luxsugero HQ: humans + AI, one orbit</p>
+      <div className="row">
+        <span className="pillbtn">{open} open</span>
+        <span className="pillbtn">{overdue} overdue</span>
+        <span className="pillbtn">{shipped} shipped this week</span>
+      </div>
     </div>
   );
 }
