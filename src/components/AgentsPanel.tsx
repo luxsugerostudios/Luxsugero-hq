@@ -2,6 +2,8 @@ import { useState } from "react";
 import { formatStamp } from "../lib/dates";
 import { useHqContext } from "../lib/hq";
 import { DIRECTIVE_STATUS_LABEL } from "../lib/labels";
+import { AGENT_STATE_LABEL, agentState } from "../lib/orbit";
+import { AgentOrbit } from "./AgentOrbit";
 import { AGENT_GROUPS, DIRECTIVE_STATUSES, type Agent, type Directive, type DirectiveStatus } from "../lib/types";
 
 export function AgentsPanel() {
@@ -10,9 +12,14 @@ export function AgentsPanel() {
 
   return (
     <section aria-labelledby="agents-heading">
-      <div className="section-head">
-        <h2 id="agents-heading">AI agents</h2>
+      <div className="section-head big-head">
+        <h2 id="agents-heading">Agent orbit</h2>
+        <p className="meta">
+          HQ at the core. Brand PMs on the inner ring, the crew on the tilted ring, departments on the outer ring. Pink shards are open tasks with no owner.
+        </p>
       </div>
+      <AgentOrbit />
+      <h3 className="list-head">All agents</h3>
       {canEdit ? <DirectiveComposer agents={agents} onSave={saveDirective} /> : null}
       {AGENT_GROUPS.map((group) => {
         const rows = agents.filter((agent) => agent.group === group);
@@ -55,11 +62,12 @@ function AgentCard({
   canEdit: boolean;
   onSave: (directive: Directive) => Promise<void>;
 }) {
+  const state = agentState(agent, directives);
   return (
-    <article className="agent">
+    <article className={`agent state-${state}`}>
       <header>
         <h4>{agent.name}</h4>
-        <span className="pill">{agent.group}</span>
+        <span className="pill">{AGENT_STATE_LABEL[state]}</span>
       </header>
       <p className="focus">{agent.focus}</p>
       {agent.waitingOnFounder.length > 0 ? (
