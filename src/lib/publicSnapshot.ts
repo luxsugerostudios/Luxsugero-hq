@@ -9,6 +9,17 @@ const EMAIL = /@/;
 const MONEY = /[₹$€£]|\b(?:INR|USD|EUR|GBP|Rs\.?)\s?\d|\b\d[\d,]*\s*(?:lakh|crore)\b/i;
 
 export type PublicTaskStatus = "open" | "overdue" | "done";
+export type PublicOwnerKind = "person" | "ai" | "bucket";
+
+export type PublicTask = {
+  title: string;
+  owner: string;
+  status: PublicTaskStatus;
+  /** Added later; older snapshots may not have these. */
+  ownerKind?: PublicOwnerKind;
+  given?: string;
+  due?: string | null;
+};
 
 export type PublicSnapshot = {
   publishedAt: string;
@@ -17,7 +28,7 @@ export type PublicSnapshot = {
   shippedThisWeek: number;
   brands: { name: string; status: string }[];
   crew: { name: string; title: string; open: number }[];
-  tasks: { title: string; owner: string; status: PublicTaskStatus }[];
+  tasks: PublicTask[];
   orbit: {
     agents: { name: string; kind: "hq" | "brand" | "dept"; state: AgentState; reportsTo: string }[];
     crew: { name: string; title: string; open: number }[];
@@ -33,13 +44,19 @@ function safeText(value: string, max = 180): string {
   return trimmed;
 }
 
-function ownerLabel(ownerId: string, people: Person[]): string {
-  if (ownerId === "unassigned") return "No owner";
-  if (ownerId === "everyone") return "Everyone";
+function ownerLabel(ownerId: string, people: Person[], agents: Agent[] = []): { name: string; kind: PublicOwnerKind } {
+  if (ownerId === "unassigned") return { name: "No owner", kind: "bucket" };
+  if (ownerId === "everyone") return { name: "Everyone", kind: "bucket" };
   const seat = orgSeat(ownerId);
-  if (seat) return firstName(seat.name);
-  return firstName(people.find((item) => item.id === ownerId)?.name ?? "");
+  if (seat) return { name: firstName(seat.name), kind: "person" };
+  const person = people.find((item) => item.id === ownerId);
+  if (person) return { name: firstName(person.name), kind: "person" };
+  const agent = agents.find((item) => item.id === ownerId);
+  if (agent) return { name: safeText(agent.name, 80), kind: "ai" };
+  return { name: "No owner", kind: "bucket" };
 }
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 function taskStatus(task: Task, today: string): PublicTaskStatus {
   if (task.status === "done") return "done";
@@ -64,9 +81,12 @@ export function buildPublicSnapshot(input: {
   );
   const publicTasks = shown.flatMap((task) => {
     const title = safeText(task.title);
-    const owner = ownerLabel(task.ownerId, input.people);
-    if (!title || !owner) return [];
-    return [{ title, owner, status: taskStatus(task, today) }];
+    const owner = ownerLabel(task.ownerId, input.people, input.agents);
+    if (!title || !owner.name) return [];
+    const row: PublicTask = { title, owner: owner.name, ownerKind: owner.kind, status: taskStatus(task, today) };
+    if (ISO_DAY.test(task.givenDate)) row.given = task.givenDate;
+    row.due = task.dueDate && ISO_DAY.test(task.dueDate) ? task.dueDate : null;
+    return [row];
   });
 
   const openByOwner = new Map<string, number>();
@@ -117,7 +137,11 @@ export function buildPublicSnapshot(input: {
     orbit: {
       agents,
       crew,
-      unowned: openTasks.filter((task) => task.ownerId === "unassigned" || !known.has(task.ownerId)).length,
+      unowned: openTasks.filter(
+        (task) =>
+          task.ownerId === "unassigned" ||
+          (!known.has(task.ownerId) && !orgSeat(task.ownerId) && !input.agents.some((agent) => agent.id === task.ownerId)),
+      ).length,
     },
     pipeline: KRAYA_BRANDS.map((brand) => {
       const board = input.pipelines.find((item) => item.id === brand);

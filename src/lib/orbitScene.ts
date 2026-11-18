@@ -122,6 +122,17 @@ export class OrbitScene {
   private drag: { x: number; y: number; theta: number; phi: number; mouse: boolean } | null = null;
   private hovered: Node | null = null;
   private filter: OrbitFilter = "all";
+  /** "people": only human names (plus HQ) stay labelled; agents show on hover or pin. */
+  private labelMode: "all" | "people" = "all";
+  private pinnedId: string | null = null;
+
+  setLabelMode(mode: "all" | "people") {
+    this.labelMode = mode;
+  }
+
+  setPinned(id: string | null) {
+    this.pinnedId = id;
+  }
   private paused = false;
   private beamClock = 0;
   private reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -593,7 +604,10 @@ export class OrbitScene {
       const x = ((v.x + 1) / 2) * w;
       const y = ((1 - v.y) / 2) * h;
       const depth = Math.max(0.35, Math.min(1, 1.6 - v.z));
-      const hide = w < 640 && node.kind === "dept" && node !== this.hovered;
+      const focused = node === this.hovered || node.id === this.pinnedId;
+      const quietAgent =
+        this.labelMode === "people" && this.filter !== "ai" && (node.kind === "dept" || node.kind === "brand");
+      const hide = !focused && (quietAgent || (w < 640 && node.kind === "dept"));
       node.label.style.opacity = hide ? "0" : String(depth);
       node.label.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
     }
