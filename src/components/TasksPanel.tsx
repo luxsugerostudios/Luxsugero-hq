@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { addDays, closedThisWeek, daysOpen, formatDay, isCarriedForward, isOverdue, kolkataDay, weekBounds } from "../lib/dates";
 import { burst } from "../lib/burst";
 import { useHqContext } from "../lib/hq";
-import { BRAND_COLOR, ORG, loadLevel, orgSeat } from "../lib/orbit";
+import { BRAND_COLOR, ORG, firstName, loadLevel, orgSeat } from "../lib/orbit";
 import { AgeBadge } from "./ui/AgeBadge";
 import { TaskDrawer } from "./ui/TaskDrawer";
+import { parseQuickAdd, parseStandup, type QuickDraft } from "../lib/quickAdd";
 import { collapseOpenTasks, taskLane, type ShownTask } from "../lib/tasks";
+import { TaskRow } from "./ui/TaskRow";
 import type { BrandId, Person, Task, TaskHistory } from "../lib/types";
 import { BRAND_IDS } from "../lib/types";
 
@@ -70,7 +72,11 @@ export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
           <h2 id="mine-heading">My tasks</h2>
         </div>
         {hq.access === "signed-out" || hq.access === "pending" ? (
-          <p className="empty">Sign in to see tasks assigned to you.</p>
+          <div className="stack">
+            <p className="empty">Sign in to see your day.</p>
+            <button type="button" className="primary" onClick={() => void hq.signIn()}>Sign in with Google</button>
+            <p className="meta">Today at HQ: {hq.data.tasks.filter((task) => task.status === "open").length} open, {hq.data.tasks.filter((task) => isOverdue(task.status, task.givenDate, today, task.flagAfterDays, task.longTerm)).length} late, {hq.data.tasks.filter((task) => task.status === "open" && task.dueDate === today).length} due today.</p>
+          </div>
         ) : null}
         {hq.access === "guest" ? (
           <p className="empty">Ask the founder to add your email.</p>
@@ -78,6 +84,8 @@ export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
         {hq.isAdmin && !linked ? (
           <p className="empty">This account is not linked to a person. Assign work from the team board.</p>
         ) : null}
+        {linked || hq.isAdmin ? <QuickAdd /> : null}
+        {hq.isAdmin ? <StandupImport /> : null}
         {linked ? <MyTasks tasks={mine} today={today} people={people} history={hq.data.history} /> : null}
       </section>
     );
@@ -326,31 +334,139 @@ function DueRadar({
 function MyTasks({
   tasks,
   today,
-  people,
-  history,
 }: {
   tasks: ShownTask[];
   today: string;
   people: Person[];
   history: Record<string, TaskHistory[]>;
 }) {
+  const [drawer, setDrawer] = useState<string | null>(null);
+  const [showDone, setShowDone] = useState(false);
+  const ownerId = tasks[0]?.task.ownerId ?? "";
+  const seat = orgSeat(ownerId);
+  const late = tasks.filter(({ task }) => isOverdue(task.status, task.givenDate, today, task.flagAfterDays, task.longTerm));
+  const dueToday = tasks.filter(({ task }) => task.status === "open" && task.dueDate === today && !late.some((item) => item.task.id === task.id));
+  const upcoming = tasks.filter(({ task }) => task.status === "open" && task.dueDate && task.dueDate > today && !late.some((item) => item.task.id === task.id));
+  const undated = tasks.filter(({ task }) => task.status === "open" && !task.dueDate && !late.some((item) => item.task.id === task.id));
+  const done = tasks.filter(({ task }) => closedThisWeek(task.status, task.closedAt, today));
+  const groups = [["Late", late], ["Today", dueToday], ["Up next", upcoming], ["No date", undated]] as const;
   return (
     <section className="my-tasks">
-      {tasks.length === 0 ? <p className="empty">Nothing assigned to you.</p> : null}
-      <div className="stack">
-        {tasks.map(({ task, duplicateIds }) => (
-          <TaskCard
-            key={task.id}
-            task={task}
-            duplicateIds={duplicateIds}
-            today={today}
-            people={people}
-            history={history[task.id] ?? []}
-            emphasis
-          />
-        ))}
-      </div>
+      <p className="meta">{seat ? `${firstName(seat.name)} · ${seat.title}` : "My day"} · {late.length} late · {dueToday.length} today</p>
+      {tasks.length === 0 ? <p className="empty">Nothing assigned to you. Ask an admin to assign one.</p> : null}
+      {groups.map(([label, rows]) => (
+        <div key={label} className="stack">
+          <h3>{label}</h3>
+          {rows.length === 0 ? <p className="empty">None</p> : null}
+          {rows.map(({ task }) => <TaskRow key={task.id} task={task} onOpen={() => setDrawer(task.id)} />)}
+        </div>
+      ))}
+      <button type="button" className="ghost" onClick={() => setShowDone((value) => !value)}>Done this week ({done.length})</button>
+      {showDone ? done.map(({ task }) => <TaskRow key={task.id} task={task} onOpen={() => setDrawer(task.id)} />) : null}
+      {drawer ? <TaskDrawer taskId={drawer} onClose={() => setDrawer(null)} /> : null}
     </section>
+  );
+}
+
+function QuickAdd() {
+  const hq = useHqContext();
+  const today = kolkataDay();
+  const [text, setText] = useState("");
+  const people = hq.data.people.map((person) => ({ id: person.id, name: orgSeat(person.id)?.name ?? person.name }));
+  const draft = parseQuickAdd(text, today, people);
+  const ownerId = draft.ownerId ?? "unassigned";
+  if (!hq.isAdmin) return null;
+  return (
+    <form
+      className="stack"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!draft.title || !ownerId) return;
+        const now = new Date().toISOString();
+        void hq.saveTask({
+          id: crypto.randomUUID(),
+          title: draft.title,
+          ownerId,
+          givenDate: today,
+          dueDate: draft.dueDate,
+          status: "open",
+          lane: "todo",
+          closedAt: null,
+          longTerm: draft.longTerm,
+          flagAfterDays: draft.longTerm ? 7 : null,
+          note: "",
+          brand: draft.brand,
+          inboxId: null,
+          createdAt: now,
+          updatedAt: now,
+        }, "Added from quick add").then(() => setText("")).catch(() => undefined);
+      }}
+    >
+      <label>
+        Quick add
+        <input value={text} onChange={(event) => setText(event.target.value)} placeholder="@debo layout #skybox tomorrow long" />
+      </label>
+      {text ? <p className="meta">{draft.title || "No title"} · {ownerId ?? "no owner"} · {draft.brand ?? "no brand"} · {draft.dueDate ?? "no date"}{draft.longTerm ? " · long-term" : ""}</p> : null}
+      <button type="submit" className="primary" disabled={!draft.title}>Add task</button>
+    </form>
+  );
+}
+
+function StandupImport() {
+  const hq = useHqContext();
+  const today = kolkataDay();
+  const [open, setOpen] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [rows, setRows] = useState<QuickDraft[]>([]);
+  const people = hq.data.people.map((person) => ({ id: person.id, name: orgSeat(person.id)?.name ?? person.name }));
+  if (!hq.isAdmin) return null;
+  return (
+    <div>
+      <button type="button" className="ghost" onClick={() => setOpen(true)}>Paste standup notes</button>
+      {open ? (
+        <div className="drawer-back" onClick={() => setOpen(false)}>
+          <aside className="drawer" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="ghost" onClick={() => setOpen(false)}>Close</button>
+            <h3>Paste standup notes</h3>
+            <textarea value={notes} rows={6} onChange={(event) => setNotes(event.target.value)} />
+            <button type="button" className="ghost" onClick={() => setRows(parseStandup(notes, today, people))}>Review</button>
+            {rows.map((row, index) => (
+              <div key={`${row.title}-${index}`} className="row">
+                <input value={row.title} onChange={(event) => setRows((current) => current.map((item, i) => i === index ? { ...item, title: event.target.value } : item))} />
+                <button type="button" className="ghost" onClick={() => setRows((current) => current.filter((_, i) => i !== index))}>Remove</button>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="primary"
+              disabled={rows.length === 0}
+              onClick={() => {
+                const now = new Date().toISOString();
+                void Promise.all(rows.filter((row) => row.title).map((row) => hq.saveTask({
+                  id: crypto.randomUUID(),
+                  title: row.title,
+                  ownerId: row.ownerId ?? "unassigned",
+                  givenDate: today,
+                  dueDate: row.dueDate,
+                  status: "open",
+                  lane: "todo",
+                  closedAt: null,
+                  longTerm: row.longTerm,
+                  flagAfterDays: row.longTerm ? 7 : null,
+                  note: `standup ${today}`,
+                  brand: row.brand,
+                  inboxId: null,
+                  createdAt: now,
+                  updatedAt: now,
+                }, `standup ${today}`))).then(() => { setRows([]); setNotes(""); setOpen(false); }).catch(() => undefined);
+              }}
+            >
+              Create {rows.length} tasks
+            </button>
+          </aside>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -480,7 +596,7 @@ function OwnerPicker({ value, onChange }: { value: string; onChange: (id: string
 }
 
 
-function TaskCard({
+export function TaskCard({
   task,
   duplicateIds = [],
   today,
