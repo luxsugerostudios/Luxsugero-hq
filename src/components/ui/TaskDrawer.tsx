@@ -11,6 +11,7 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
   const task = hq.data.tasks.find((item) => item.id === taskId);
   const [note, setNote] = useState(task?.note ?? "");
   const [longTerm, setLongTerm] = useState(Boolean(task?.longTerm));
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const mine = Boolean(hq.personId && task && task.ownerId === hq.personId);
   const canUpdate = Boolean(task && (hq.isAdmin || (hq.isMember && mine)));
 
@@ -36,6 +37,33 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
           {task.dueDate ? ` · Due ${formatDay(task.dueDate)}` : " · No due date"}
           {` · ${task.lane ?? "todo"}`}
         </p>
+        {canUpdate ? (
+          <div className="drawer-actions">
+            <button
+              type="button"
+              className="primary"
+              onClick={() => void hq.setTaskStatus(task, task.status === "done" ? "open" : "done").catch(() => undefined)}
+            >
+              {task.status === "done" ? "Reopen task" : "Mark done"}
+            </button>
+            {hq.isAdmin ? (
+              confirmDelete ? (
+                <>
+                  <button
+                    type="button"
+                    className="warn"
+                    onClick={() => void hq.deleteTask(task.id).then(onClose).catch(() => undefined)}
+                  >
+                    Yes, delete it
+                  </button>
+                  <button type="button" className="ghost" onClick={() => setConfirmDelete(false)}>Keep it</button>
+                </>
+              ) : (
+                <button type="button" className="ghost" onClick={() => setConfirmDelete(true)}>Delete task</button>
+              )
+            ) : null}
+          </div>
+        ) : null}
         {canUpdate ? (
           <label>
             Lane

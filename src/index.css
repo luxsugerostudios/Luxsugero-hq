@@ -1091,3 +1091,12 @@ html[data-density="compact"] .row-item { min-height: 44px; }
 @media (max-width: 640px) {
   .attn-flow b { font-size: 28px; }
 }
+
+/* Team board matrix: columns fit the screen; long titles truncate instead of widening the table. */
+.matrix { table-layout: fixed; }
+.matrix th:first-child, .matrix td.who { width: 150px; }
+.matrix td { min-width: 0; overflow: hidden; }
+.chip-task { min-width: 0; max-width: 100%; }
+.chip-task span { flex: 1; min-width: 0; }
+.drawer-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.drawer-actions .warn { background: var(--pink); color: var(--on-pink); border-radius: 999px; }
