@@ -227,18 +227,22 @@ export function HqProvider({ children }: { children: ReactNode }) {
       leads: [],
     };
 
+    // Called on every snapshot. The first complete set flips the phase to live;
+    // every later snapshot must also reach the screen, or writes look like they
+    // did nothing until a reload.
     const finish = () => {
-      if (failed || settled || seen.size < 5) return;
+      if (failed || seen.size < 5) return;
+      const first = !settled;
       settled = true;
       setData((prev) => ({
-        ...buffer,
-        directives: prev.directives,
-        privateLeads: prev.privateLeads,
-        inbox: prev.inbox,
-        history: prev.history,
-        pipelines: prev.pipelines,
+        ...prev,
+        people: buffer.people,
+        tasks: buffer.tasks,
+        agents: buffer.agents,
+        brands: buffer.brands,
+        leads: buffer.leads,
       }));
-      setPhase("live");
+      if (first) setPhase("live");
     };
 
     const fail = (error: unknown) => {

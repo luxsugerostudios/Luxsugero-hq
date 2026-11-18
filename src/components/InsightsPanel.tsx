@@ -1,12 +1,148 @@
-import { formatDay, isOverdue, kolkataDay } from "../lib/dates";
+import { diffDays, formatDay, isOverdue, kolkataDay } from "../lib/dates";
 import { buildInsights } from "../lib/insights";
 import { useHqContext } from "../lib/hq";
-import { buildHqNotes } from "../lib/observations";
-import { KRAYA_BRANDS, KRAYA_LABEL } from "../lib/pipeline";
+import { buildHqNotes, type HqNotes } from "../lib/observations";
+import { KRAYA_BRANDS, KRAYA_LABEL, type KrayaBrand } from "../lib/pipeline";
+import type { Task } from "../lib/types";
 import { orgSeat } from "../lib/orbit";
 import { rotationReports } from "../lib/rotation";
 import { visibleTasks } from "../lib/tasks";
 import { actorName } from "./TasksPanel";
+
+type PersonFlag = { id: string; name: string; late: Task[]; stuck: Task[] };
+
+function go(hash: string) {
+  window.location.hash = hash;
+  window.scrollTo({ top: 0 });
+}
+
+/**
+ * The same facts as the HQ notes, grouped so each person, pipeline gap and
+ * next step reads as one card with the tasks behind it and a way to act.
+ */
+function AttentionBoard({ tasks, today, notes }: { tasks: Task[]; today: string; notes: HqNotes }) {
+  const { data } = useHqContext();
+  const open = tasks.filter((task) => task.status === "open");
+  const byPerson = new Map<string, PersonFlag>();
+  const flag = (task: Task) => {
+    const id = task.ownerId;
+    if (!byPerson.has(id)) {
+      const name = id === "unassigned" ? "No owner" : orgSeat(id)?.name ?? actorName(id, data.people);
+      byPerson.set(id, { id, name, late: [], stuck: [] });
+    }
+    return byPerson.get(id)!;
+  };
+  for (const task of open) {
+    const late = isOverdue(task.status, task.givenDate, today, task.flagAfterDays, task.longTerm);
+    const stuck = diffDays(task.givenDate, today) > 7;
+    if (late) flag(task).late.push(task);
+    else if (stuck) flag(task).stuck.push(task);
+  }
+  const people = [...byPerson.values()].sort(
+    (a, b) => (a.id === "unassigned" ? -1 : b.id === "unassigned" ? 1 : 0) || b.late.length + b.stuck.length - (a.late.length + a.stuck.length),
+  );
+  const unowned = open.filter((task) => task.ownerId === "unassigned").length;
+
+  const gaps = data.pipelines.flatMap((board) => {
+    const brand = board.id in KRAYA_LABEL ? KRAYA_LABEL[board.id as KrayaBrand] : board.brand;
+    const sum = (pattern: RegExp) => {
+      const rows = board.stages.filter((stage) => pattern.test(stage.name));
+      return rows.length ? rows.reduce((total, row) => total + row.count, 0) : null;
+    };
+    const out: { key: string; brand: string; from: string; fromCount: number; to: string; action: string }[] = [];
+    const quotes = sum(/quote/i);
+    const deposits = sum(/deposit/i);
+    if (quotes && deposits === 0) out.push({ key: `${board.id}-q`, brand, from: "Quotes sent", fromCount: quotes, to: "Deposits", action: "Follow up the quotes already sent." });
+    const qualified = sum(/qualified|good lead/i);
+    const visits = sum(/site visit|visit/i);
+    if (qualified && visits === 0) out.push({ key: `${board.id}-v`, brand, from: "Qualified leads", fromCount: qualified, to: "Site visits", action: "Schedule site visits for leads already in the funnel." });
+    return out;
+  });
+
+  const steps: { text: string; action: string; target: string }[] = [];
+  if (unowned) steps.push({ text: `Give the ${unowned} unowned ${unowned === 1 ? "task" : "tasks"} an owner`, action: "Open triage", target: "inbox" });
+  if (people.some((person) => person.late.length || person.stuck.length)) steps.push({ text: "Review late and stuck work with each owner", action: "Open team board", target: "board" });
+  for (const gap of gaps) steps.push({ text: `${gap.brand}: ${gap.action.charAt(0).toLowerCase()}${gap.action.slice(1)}`, action: "Open pipeline", target: "pipeline" });
+
+  if (!people.length && !gaps.length && !notes.observations.length) {
+    return <p className="empty">Nothing needs attention right now.</p>;
+  }
+
+  return (
+    <div className="attn">
+      <section className="attn-block" aria-labelledby="attn-people">
+        <div className="attn-head">
+          <h3 id="attn-people">Who needs a nudge</h3>
+          <p className="meta">Late work first, then tasks open more than 7 days.</p>
+        </div>
+        {people.length === 0 ? <p className="empty">Everyone is on track.</p> : null}
+        <div className="attn-people">
+          {people.map((person) => {
+            const list = [...person.late, ...person.stuck];
+            return (
+              <article key={person.id} className={`attn-person${person.id === "unassigned" ? " is-unowned" : ""}`}>
+                <header>
+                  <h4>{person.name}</h4>
+                  <div className="attn-chips">
+                    {person.late.length ? <span className="attn-chip late">{person.late.length} late</span> : null}
+                    {person.stuck.length ? <span className="attn-chip stuck">{person.stuck.length} open 7+ days</span> : null}
+                  </div>
+                </header>
+                <ul>
+                  {list.slice(0, 3).map((task) => (
+                    <li key={task.id}>
+                      <span title={task.title}>{task.title}</span>
+                      <em>{diffDays(task.givenDate, today)}d</em>
+                    </li>
+                  ))}
+                </ul>
+                {list.length > 3 ? <p className="meta">+{list.length - 3} more</p> : null}
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      {gaps.length ? (
+        <section className="attn-block" aria-labelledby="attn-pipe">
+          <div className="attn-head">
+            <h3 id="attn-pipe">Where the pipeline stalls</h3>
+            <p className="meta">From the latest Kraya sync.</p>
+          </div>
+          <div className="attn-gaps">
+            {gaps.map((gap) => (
+              <article key={gap.key} className="attn-gap">
+                <p className="attn-brand">{gap.brand}</p>
+                <div className="attn-flow">
+                  <div><b>{gap.fromCount}</b><span>{gap.from}</span></div>
+                  <i aria-hidden="true" />
+                  <div className="zero"><b>0</b><span>{gap.to}</span></div>
+                </div>
+                <p>{gap.action}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {steps.length ? (
+        <section className="attn-block" aria-labelledby="attn-next">
+          <div className="attn-head">
+            <h3 id="attn-next">Next steps</h3>
+          </div>
+          <ol className="attn-steps">
+            {steps.map((step) => (
+              <li key={step.text}>
+                <span>{step.text}</span>
+                <button type="button" className="ghost" onClick={() => go(step.target)}>{step.action}</button>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
+    </div>
+  );
+}
 
 export function InsightsPanel() {
   const { data } = useHqContext();
@@ -117,17 +253,8 @@ export function InsightsPanel() {
           );
         })}
       </div>
-      <h3 className="list-head">Observations</h3>
-      {notes.observations.length === 0 ? <p className="empty">Nothing to flag from the current records.</p> : null}
-      <ul className="mini">
-        {notes.observations.map((line) => <li key={line}>{line}</li>)}
-      </ul>
-      <h3 className="list-head">Recommendations</h3>
-      {notes.recommendations.length === 0 ? <p className="empty">No recommendation from these counts.</p> : null}
-      <ul className="mini">
-        {notes.recommendations.map((line) => <li key={line}>{line}</li>)}
-      </ul>
-      <p className="meta">Updated {formatDay(today)}. HQ insights.</p>
+      <AttentionBoard tasks={tasks} today={today} notes={notes} />
+      <p className="meta">Updated {formatDay(today)}. Counted from the records in HQ.</p>
     </section>
   );
 }
