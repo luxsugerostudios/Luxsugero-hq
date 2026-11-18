@@ -115,6 +115,7 @@ export function AgentOrbit({ hero = false }: { hero?: boolean }) {
           onComet: (taskId) => setSelected((current) => (current === taskId ? null : taskId)),
           onEmpty: () => setSelected(null),
         });
+        scene.setLabelMode("people");
         sceneRef.current = scene;
         setReady(true);
       })

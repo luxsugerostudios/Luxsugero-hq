@@ -1,16 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, type User } from "firebase/auth";
+import type { User } from "firebase/auth";
+import { PublicCockpit } from "./PublicCockpit";
+import { SignInButton, useAuthUser } from "./publicAuth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { isFirebaseConfigured } from "../firebaseConfig";
 import { formatStamp, kolkataDay } from "../lib/dates";
 import { getServices } from "../lib/firebase";
 import { loadSeed } from "../lib/map";
-import { BRAND_COLOR, loadLevel } from "../lib/orbit";
-import type { OrbitAgent, OrbitCrew, OrbitFilter, OrbitScene } from "../lib/orbitScene";
+import { BRAND_COLOR } from "../lib/orbit";
 import { buildPublicSnapshot, type PublicSnapshot, type PublicTask } from "../lib/publicSnapshot";
 
-const KIND_COLOR = { hq: "#c6ff3d", brand: "#3de8ff", dept: "#5b5bff" } as const;
-const orbitScenePromise = import("../lib/orbitScene");
 
 type PublicStatus = PublicTask["status"];
 type Who = "person" | "ai" | "bucket";
@@ -20,71 +19,9 @@ const STATUS_LABEL: Record<PublicStatus, string> = { overdue: "Late", open: "Ope
 const WHO_LABEL: Record<Who, string> = { person: "Team", ai: "AI agents", bucket: "No owner" };
 const UNOWNED = /^(no owner|unassigned)$/i;
 
-function scrollToId(id: string) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 72, behavior: reduce ? "auto" : "smooth" });
-}
-
 function whoOf(task: PublicTask): Who {
   if (task.ownerKind) return task.ownerKind;
   return UNOWNED.test(task.owner) || /^everyone$/i.test(task.owner) ? "bucket" : "person";
-}
-
-/* ---------------- sign-in ---------------- */
-
-function useAuthUser(): User | null {
-  const [user, setUser] = useState<User | null>(null);
-  useEffect(() => {
-    const services = getServices();
-    if (!services) return;
-    return onAuthStateChanged(services.auth, setUser);
-  }, []);
-  return user;
-}
-
-function openHq() {
-  window.location.hash = "overview";
-  window.scrollTo({ top: 0 });
-}
-
-function SignInButton({ user, className = "primary" }: { user: User | null; className?: string }) {
-  const [busy, setBusy] = useState(false);
-  if (user) {
-    const first = (user.displayName ?? "").trim().split(/\s+/)[0];
-    return (
-      <button type="button" className={className} onClick={openHq}>
-        {first ? `Open HQ as ${first}` : "Open HQ"}
-      </button>
-    );
-  }
-  return (
-    <button
-      type="button"
-      className={className}
-      disabled={busy}
-      onClick={() => {
-        const services = getServices();
-        if (!services) {
-          openHq();
-          return;
-        }
-        const provider = new GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: "select_account" });
-        setBusy(true);
-        signInWithPopup(services.auth, provider)
-          .then(openHq)
-          .catch((error: unknown) => {
-            const code = (error as { code?: string })?.code ?? "";
-            if (!code.includes("popup-closed")) openHq();
-          })
-          .finally(() => setBusy(false));
-      }}
-    >
-      {busy ? "Signing in…" : "Sign in to HQ"}
-    </button>
-  );
 }
 
 /* ---------------- page ---------------- */
@@ -135,19 +72,10 @@ export function PublicView() {
 
   return (
     <div className="app pv-app">
-      <header className="topbar pv-top">
-        <p className="brand"><span>Luxsugero</span> HQ</p>
-        <nav className="pv-nav" aria-label="Sections">
-          <button type="button" onClick={() => scrollToId("today")}>Today</button>
-          <button type="button" onClick={() => scrollToId("team")}>Team and AI</button>
-          <button type="button" onClick={() => scrollToId("pipeline")}>Pipeline</button>
-        </nav>
-        <SignInButton user={user} />
-      </header>
-      <main id="main" className="content pv-content">
-        {phase === "loading" ? <p className="empty">Loading…</p> : null}
-        {phase === "empty" ? <p className="empty">This view has not been published yet.</p> : null}
-        {phase === "error" ? <p className="empty">The public view could not be loaded.</p> : null}
+      <main id="main" className="pv-content">
+        {phase === "loading" ? <p className="empty pv-pad">Loading…</p> : null}
+        {phase === "empty" ? <p className="empty pv-pad">This view has not been published yet.</p> : null}
+        {phase === "error" ? <p className="empty pv-pad">The public view could not be loaded.</p> : null}
         {phase === "ready" && snapshot ? <PublicBody snapshot={snapshot} user={user} /> : null}
       </main>
     </div>
@@ -157,69 +85,16 @@ export function PublicView() {
 function PublicBody({ snapshot, user }: { snapshot: PublicSnapshot; user: User | null }) {
   return (
     <section className="pv" aria-label="Public view">
-      <PublicOrbit snapshot={snapshot} user={user} />
-      <div className="pv-layout">
-        <div className="pv-main">
-          <TodaySection tasks={snapshot.tasks} />
-          <PublicBoard tasks={snapshot.tasks} />
-          <PipelineSection snapshot={snapshot} />
-        </div>
-        <Sidebar snapshot={snapshot} user={user} />
+      <PublicCockpit snapshot={snapshot} user={user} />
+      <div className="pv-below">
+        <TodaySection tasks={snapshot.tasks} />
+        <PublicBoard tasks={snapshot.tasks} />
+        <PipelineSection snapshot={snapshot} />
+        <p className="pv-foot">
+          View mode. <SignInButton user={user} className="cp-link" label={user ? "Open the full HQ" : "Sign in to work in HQ"} />
+        </p>
       </div>
     </section>
-  );
-}
-
-/* ---------------- sidebar ---------------- */
-
-function Sidebar({ snapshot, user }: { snapshot: PublicSnapshot; user: User | null }) {
-  const crew = [...snapshot.crew].sort((a, b) => b.open - a.open || a.name.localeCompare(b.name));
-  const maxLoad = Math.max(1, ...crew.map((row) => row.open));
-  const observations = snapshot.insights?.observations ?? [];
-  const recommendations = snapshot.insights?.recommendations ?? [];
-  return (
-    <aside className="pv-side" aria-label="Summary">
-      <div className="pv-card pv-signin">
-        <h3>{user ? "You're signed in" : "Work on this in HQ"}</h3>
-        <p className="meta">
-          {user ? "Open the full HQ to assign, update and close tasks." : "Sign in with Google to assign tasks, update status and use the triage desk."}
-        </p>
-        <SignInButton user={user} />
-      </div>
-
-      <div className="pv-card pv-stats">
-        <div className="pv-stat lime"><b>{snapshot.open}</b><span>open</span></div>
-        <div className="pv-stat pink"><b>{snapshot.overdue}</b><span>late</span></div>
-        <div className="pv-stat blue"><b>{snapshot.shippedThisWeek}</b><span>shipped this week</span></div>
-      </div>
-
-      <div className="pv-card">
-        <h3>Team load</h3>
-        <ul className="pv-load">
-          {crew.map((row) => (
-            <li key={row.name}>
-              <span className={`pv-name load-${loadLevel(row.open)}`}>{row.name}</span>
-              <span className="cbar"><span className={`load-${loadLevel(row.open)}`} style={{ width: `${Math.max((row.open / maxLoad) * 100, row.open ? 8 : 3)}%` }} /></span>
-              <b>{row.open}</b>
-            </li>
-          ))}
-        </ul>
-        {snapshot.orbit.unowned > 0 ? <p className="pv-flag">{snapshot.orbit.unowned} open tasks have no owner</p> : null}
-      </div>
-
-      {observations.length + recommendations.length > 0 ? (
-        <div className="pv-card pv-notes">
-          <details open>
-            <summary>What HQ sees</summary>
-            <ul className="pv-list">{observations.map((line) => <li key={line}>{line}</li>)}</ul>
-          </details>
-          <details>
-            <summary>What to do next</summary>
-            <ul className="pv-list">{recommendations.map((line) => <li key={line}>{line}</li>)}</ul>
-          </details>
-        </div>
-      ) : null}
-    </aside>
   );
 }
 
@@ -540,158 +415,3 @@ function brandColor(name: string): string {
   return BRAND_COLOR.skybox;
 }
 
-/* ---------------- orbit hero ---------------- */
-
-function PublicOrbit({ snapshot, user }: { snapshot: PublicSnapshot; user: User | null }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const labelsRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<OrbitScene | null>(null);
-  const [ready, setReady] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const [filter, setFilter] = useState<OrbitFilter>("all");
-  const [paused, setPaused] = useState(false);
-  const [picked, setPicked] = useState<string | null>(null);
-
-  const agents = useMemo<OrbitAgent[]>(() => {
-    const byName = new Map(snapshot.orbit.agents.map((agent, index) => [agent.name, `a${index}`] as const));
-    return snapshot.orbit.agents.map((agent, index) => ({
-      id: `a${index}`,
-      name: agent.name,
-      kind: agent.kind,
-      color: KIND_COLOR[agent.kind],
-      state: agent.state,
-      parentId: agent.reportsTo ? byName.get(agent.reportsTo) ?? null : null,
-    }));
-  }, [snapshot]);
-  const crew = useMemo<OrbitCrew[]>(
-    () =>
-      snapshot.orbit.crew.map((row, index) => ({
-        id: `c${index}`,
-        name: row.name,
-        count: row.open,
-        level: loadLevel(row.open),
-      })),
-    [snapshot],
-  );
-  const comets = useMemo(
-    () => Array.from({ length: snapshot.orbit.unowned }, (_, index) => `u${index}`),
-    [snapshot.orbit.unowned],
-  );
-
-  useEffect(() => {
-    let disposed = false;
-    let scene: OrbitScene | null = null;
-    orbitScenePromise
-      .then(({ OrbitScene }) => {
-        if (disposed || !canvasRef.current || !labelsRef.current) return;
-        scene = new OrbitScene(canvasRef.current, labelsRef.current, {
-          onNode: (id) => setPicked(id),
-          onComet: () => undefined,
-          onEmpty: () => setPicked(null),
-        });
-        scene.setLabelMode("people");
-        sceneRef.current = scene;
-        setReady(true);
-      })
-      .catch(() => setFailed(true));
-    return () => {
-      disposed = true;
-      scene?.dispose();
-      sceneRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (ready) sceneRef.current?.setAgents(agents);
-  }, [ready, agents]);
-  useEffect(() => {
-    if (ready) sceneRef.current?.setCrew(crew);
-  }, [ready, crew]);
-  useEffect(() => {
-    if (ready) sceneRef.current?.setComets(comets, null);
-  }, [ready, comets]);
-  useEffect(() => {
-    sceneRef.current?.setFilter(filter);
-  }, [filter, ready]);
-  useEffect(() => {
-    sceneRef.current?.setPaused(paused);
-  }, [paused, ready]);
-  useEffect(() => {
-    sceneRef.current?.setPinned(picked);
-  }, [picked, ready]);
-
-  const pickedAgent = picked?.startsWith("a") ? snapshot.orbit.agents[Number(picked.slice(1))] : null;
-  const pickedCrew = picked?.startsWith("c") ? snapshot.orbit.crew[Number(picked.slice(1))] : null;
-  const crewTasks = pickedCrew ? snapshot.tasks.filter((task) => task.owner === pickedCrew.name && task.status !== "done") : [];
-
-  return (
-    <div className="orbit-wrap pv-hero">
-      <div className="stage">
-        <canvas ref={canvasRef} className="orbit-canvas" aria-label="View-only map of the team and AI agents. Drag to rotate." />
-        <div ref={labelsRef} className="orbit-labels" aria-hidden="true" />
-        {!ready && !failed ? <p className="orbit-fallback">Loading the orbit…</p> : null}
-        {failed ? <p className="orbit-fallback">The 3D view could not start. The sections below have the same names.</p> : null}
-        <div className="orbit-ctrls">
-          {(["all", "ai", "crew"] as const).map((item) => (
-            <button key={item} type="button" className="pillbtn" aria-pressed={filter === item} onClick={() => setFilter(item)}>
-              {item === "all" ? "All" : item === "ai" ? "AI only" : "Team only"}
-            </button>
-          ))}
-          <span className="sp" />
-          <button type="button" className="pillbtn" aria-label="Zoom in" onClick={() => sceneRef.current?.zoom(-1)}>+</button>
-          <button type="button" className="pillbtn" aria-label="Zoom out" onClick={() => sceneRef.current?.zoom(1)}>−</button>
-          <button type="button" className="pillbtn" aria-pressed={paused} onClick={() => setPaused((value) => !value)}>
-            {paused ? "Resume" : "Pause"}
-          </button>
-        </div>
-        <div className="pv-hero-copy">
-          <h1>Humans and AI, one orbit</h1>
-          <div className="pv-hero-stats">
-            <span><b>{snapshot.open}</b> open</span>
-            <span className="late"><b>{snapshot.overdue}</b> late</span>
-            <span><b>{snapshot.shippedThisWeek}</b> shipped this week</span>
-          </div>
-          <div className="pv-hero-cta">
-            <SignInButton user={user} />
-            <button type="button" className="pillbtn" onClick={() => scrollToId("today")}>See today's work</button>
-          </div>
-        </div>
-        <div className="orbit-key" aria-hidden="true">
-          <span><i className="sq" />Team</span>
-          <span><i style={{ background: "#5b5bff" }} />AI agent, hover for name</span>
-          <span><i style={{ background: "var(--pink)" }} />No owner</span>
-        </div>
-        {pickedAgent || pickedCrew ? (
-          <aside className="orbit-panel" aria-live="polite">
-            <button type="button" className="pillbtn close" onClick={() => setPicked(null)}>Close</button>
-            {pickedCrew ? (
-              <>
-                <p className="meta">Team</p>
-                <h3>{pickedCrew.name}</h3>
-                <dl>
-                  <dt>Open tasks</dt><dd>{pickedCrew.open}</dd>
-                </dl>
-                {crewTasks.length ? (
-                  <ul className="waiting">
-                    {crewTasks.slice(0, 5).map((task, index) => <li key={`${task.title}-${index}`}>{task.title}</li>)}
-                  </ul>
-                ) : null}
-              </>
-            ) : pickedAgent ? (
-              <>
-                <p className="meta">AI agent</p>
-                <h3>{pickedAgent.name}</h3>
-                <span className="state" style={{ background: "var(--lime)" }}>{pickedAgent.state === "sync" ? "Awaiting first sync" : pickedAgent.state}</span>
-                {pickedAgent.reportsTo ? (
-                  <dl>
-                    <dt>Reports to</dt><dd>{pickedAgent.reportsTo}</dd>
-                  </dl>
-                ) : null}
-              </>
-            ) : null}
-          </aside>
-        ) : null}
-      </div>
-    </div>
-  );
-}

@@ -1,4 +1,4 @@
-import { closedThisWeek, isOverdue, kolkataDay } from "./dates.ts";
+import { closedThisWeek, isOverdue, kolkataDay, stampToKolkataDay } from "./dates.ts";
 import { ORG, agentState, firstName, orgSeat, REPORTS_TO, type AgentState } from "./orbit.ts";
 import { buildHqNotes } from "./observations.ts";
 import { KRAYA_BRANDS, KRAYA_LABEL } from "./pipeline.ts";
@@ -19,6 +19,9 @@ export type PublicTask = {
   ownerKind?: PublicOwnerKind;
   given?: string;
   due?: string | null;
+  /** Kolkata day the task was closed, for done tasks. */
+  closed?: string;
+  brand?: string | null;
 };
 
 export type PublicSnapshot = {
@@ -86,6 +89,11 @@ export function buildPublicSnapshot(input: {
     const row: PublicTask = { title, owner: owner.name, ownerKind: owner.kind, status: taskStatus(task, today) };
     if (ISO_DAY.test(task.givenDate)) row.given = task.givenDate;
     row.due = task.dueDate && ISO_DAY.test(task.dueDate) ? task.dueDate : null;
+    row.brand = task.brand ?? null;
+    if (task.status === "done" && task.closedAt) {
+      const day = stampToKolkataDay(task.closedAt);
+      if (ISO_DAY.test(day)) row.closed = day;
+    }
     return [row];
   });
 
