@@ -233,7 +233,8 @@ button.primary:disabled { opacity: 0.45; cursor: not-allowed; }
 .task.is-emphasis { border-color: var(--ink); }
 .age { text-align: right; }
 .age b { font-size: 20px; }
-.flag { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; }
+.flag, .carried { font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
+.carried { color: var(--muted); }
 .long-term {
   display: inline-block;
   margin-top: 4px;

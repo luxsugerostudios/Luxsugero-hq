@@ -1,13 +1,21 @@
 import { kolkataDay } from "../lib/dates";
 import { buildInsights } from "../lib/insights";
 import { useHqContext } from "../lib/hq";
+import { visibleTasks } from "../lib/tasks";
 import { BRAND_STATUS_LABEL } from "../lib/labels";
 import { actorName } from "./TasksPanel";
 
 export function OverviewPanel() {
   const { data } = useHqContext();
   const today = kolkataDay();
-  const insights = buildInsights(data.tasks, data.people, data.leads, data.agents, data.brands, today);
+  const insights = buildInsights(
+    visibleTasks(data.tasks),
+    data.people,
+    data.leads,
+    data.agents,
+    data.brands,
+    today,
+  );
   const name = (personId: string) => actorName(personId, data.people);
   const openRequests = data.inbox.filter((item) => item.status === "new").length;
   const overdueCount = insights.overdueByPerson.reduce((sum, row) => sum + row.count, 0);

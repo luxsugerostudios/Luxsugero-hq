@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { closedThisWeek, daysOpen, formatDay, isOverdue, kolkataDay } from "../lib/dates";
+import { closedThisWeek, daysOpen, formatDay, isCarriedForward, isOverdue, kolkataDay } from "../lib/dates";
 import { useHqContext } from "../lib/hq";
+import { collapseOpenTasks, type ShownTask } from "../lib/tasks";
 import type { BrandId, Person, Task, TaskHistory } from "../lib/types";
 import { BRAND_IDS } from "../lib/types";
 
@@ -28,9 +29,10 @@ export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
   const [query, setQuery] = useState("");
   const [dragOver, setDragOver] = useState<string | null>(null);
 
+  const collapsed = useMemo(() => collapseOpenTasks(hq.data.tasks), [hq.data.tasks]);
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return hq.data.tasks.filter((task) => {
+    return collapsed.filter(({ task }) => {
       if (personFilter !== "all" && task.ownerId !== personFilter) return false;
       if (brandFilter === "none" && task.brand) return false;
       if (brandFilter !== "all" && brandFilter !== "none" && task.brand !== brandFilter) return false;
@@ -38,18 +40,18 @@ export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
       if (statusFilter === "done" && task.status !== "done") return false;
       if (
         statusFilter === "overdue" &&
-        !isOverdue(task.status, task.givenDate, today, task.flagAfterDays)
+        !isOverdue(task.status, task.givenDate, today, task.flagAfterDays, task.longTerm)
       ) {
         return false;
       }
       if (!needle) return true;
       return `${task.title} ${task.note}`.toLowerCase().includes(needle);
     });
-  }, [brandFilter, hq.data.tasks, personFilter, query, statusFilter, today]);
+  }, [brandFilter, collapsed, personFilter, query, statusFilter, today]);
 
   const mine =
     hq.personId && hq.personId !== "founder" && hq.personId !== "admin"
-      ? visible.filter((task) => task.ownerId === hq.personId)
+      ? visible.filter((item) => item.task.ownerId === hq.personId)
       : [];
 
   const shownPeople =
@@ -138,7 +140,7 @@ export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
           <PersonColumn
             key={person.id}
             person={person}
-            tasks={visible.filter((task) => task.ownerId === person.id)}
+            tasks={visible.filter((item) => item.task.ownerId === person.id)}
             today={today}
             people={people}
             history={hq.data.history}
@@ -166,7 +168,7 @@ function MyTasks({
   people,
   history,
 }: {
-  tasks: Task[];
+  tasks: ShownTask[];
   today: string;
   people: Person[];
   history: Record<string, TaskHistory[]>;
@@ -175,8 +177,16 @@ function MyTasks({
     <section className="my-tasks">
       {tasks.length === 0 ? <p className="empty">Nothing assigned to you.</p> : null}
       <div className="stack">
-        {tasks.map((task) => (
-          <TaskCard key={task.id} task={task} today={today} people={people} history={history[task.id] ?? []} emphasis />
+        {tasks.map(({ task, duplicateIds }) => (
+          <TaskCard
+            key={task.id}
+            task={task}
+            duplicateIds={duplicateIds}
+            today={today}
+            people={people}
+            history={history[task.id] ?? []}
+            emphasis
+          />
         ))}
       </div>
     </section>
@@ -272,7 +282,7 @@ function PersonColumn({
   onDrop,
 }: {
   person: Person;
-  tasks: Task[];
+  tasks: ShownTask[];
   today: string;
   people: Person[];
   history: Record<string, TaskHistory[]>;
@@ -283,12 +293,14 @@ function PersonColumn({
   onDrop: (taskId: string) => void;
 }) {
   const open = tasks.filter(
-    (task) => task.status === "open" && !isOverdue(task.status, task.givenDate, today, task.flagAfterDays),
+    ({ task }) =>
+      task.status === "open" &&
+      !isOverdue(task.status, task.givenDate, today, task.flagAfterDays, task.longTerm),
   );
-  const overdue = tasks.filter((task) =>
-    isOverdue(task.status, task.givenDate, today, task.flagAfterDays),
+  const overdue = tasks.filter(({ task }) =>
+    isOverdue(task.status, task.givenDate, today, task.flagAfterDays, task.longTerm),
   );
-  const done = tasks.filter((task) =>
+  const done = tasks.filter(({ task }) =>
     showAllDone ? task.status === "done" : closedThisWeek(task.status, task.closedAt, today),
   );
   return (
@@ -326,7 +338,7 @@ function Lane({
   history,
 }: {
   title: string;
-  tasks: Task[];
+  tasks: ShownTask[];
   today: string;
   people: Person[];
   history: Record<string, TaskHistory[]>;
@@ -338,8 +350,15 @@ function Lane({
       </p>
       {tasks.length === 0 ? <p className="empty">None</p> : null}
       <div className="stack">
-        {tasks.map((task) => (
-          <TaskCard key={task.id} task={task} today={today} people={people} history={history[task.id] ?? []} />
+        {tasks.map(({ task, duplicateIds }) => (
+          <TaskCard
+            key={task.id}
+            task={task}
+            duplicateIds={duplicateIds}
+            today={today}
+            people={people}
+            history={history[task.id] ?? []}
+          />
         ))}
       </div>
     </div>
@@ -348,12 +367,14 @@ function Lane({
 
 function TaskCard({
   task,
+  duplicateIds = [],
   today,
   people,
   history,
   emphasis = false,
 }: {
   task: Task;
+  duplicateIds?: string[];
   today: string;
   people: Person[];
   history: TaskHistory[];
@@ -370,7 +391,8 @@ function TaskCard({
   const canTick = isAdmin || (isMember && mine);
   const status = localStatus ?? task.status;
   const age = daysOpen(task.givenDate, today);
-  const overdue = status === "open" && isOverdue("open", task.givenDate, today, task.flagAfterDays);
+  const overdue = status === "open" && isOverdue("open", task.givenDate, today, task.flagAfterDays, task.longTerm);
+  const carried = status === "open" && isCarriedForward("open", task.givenDate, today);
   useEffect(() => {
     setLocalStatus(null);
     setNote(task.note);
@@ -441,7 +463,8 @@ function TaskCard({
         <p className="age">
           <b>{age}</b>
           <span>{age === 1 ? "day open" : "days open"}</span>
-          {overdue ? <span className="flag">OVERDUE</span> : null}
+          {carried ? <span className="carried">Carried from {formatDay(task.givenDate)}</span> : null}
+          {overdue ? <span className="flag">Overdue</span> : null}
         </p>
       ) : (
         <p className="meta">Done</p>
@@ -484,6 +507,18 @@ function TaskCard({
               Edit
             </button>
           ) : null}
+          {duplicateIds.map((id) => (
+            <button
+              key={id}
+              type="button"
+              className="ghost"
+              onClick={() => {
+                if (window.confirm("Remove the duplicate copy of this task?")) void deleteTask(id);
+              }}
+            >
+              Remove duplicate
+            </button>
+          ))}
           <button
             type="button"
             className="warn"

@@ -29,11 +29,12 @@ export function daysOpen(givenDate: string, today: string): number {
   return Math.max(0, diffDays(givenDate, today));
 }
 
-/** Days open before a task is overdue. Uses `flagAfterDays` when it is set. */
-export function overdueAfter(flagAfterDays?: number | null): number {
-  return typeof flagAfterDays === "number" && Number.isInteger(flagAfterDays) && flagAfterDays >= 0
-    ? flagAfterDays
-    : 3;
+/** Days open before a task is overdue. A set `flagAfterDays` wins; otherwise long-term tasks use 7 and the rest use 3. */
+export function overdueAfter(flagAfterDays?: number | null, longTerm = false): number {
+  if (typeof flagAfterDays === "number" && Number.isInteger(flagAfterDays) && flagAfterDays >= 0) {
+    return flagAfterDays;
+  }
+  return longTerm ? 7 : 3;
 }
 
 /** Open for more calendar days than the threshold. A task given today is day 0. `today` is a Kolkata YYYY-MM-DD. */
@@ -42,8 +43,9 @@ export function isOverdue(
   givenDate: string,
   today: string,
   flagAfterDays?: number | null,
+  longTerm = false,
 ): boolean {
-  return status === "open" && diffDays(givenDate, today) > overdueAfter(flagAfterDays);
+  return status === "open" && diffDays(givenDate, today) > overdueAfter(flagAfterDays, longTerm);
 }
 
 /** Still open after the day it was given. */

@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node --test src/lib/dates.test.ts src/lib/insights.test.ts scripts/push-data.test.mjs",
+    "test": "node --test src/lib/dates.test.ts src/lib/insights.test.ts src/lib/tasks.test.ts scripts/push-data.test.mjs",
     "test:rules": "firebase emulators:exec --only firestore --project demo-luxsugero \"node --test --test-concurrency=1 tests/firestore.rules.test.mjs\"",
     "check:seed": "node scripts/push-data.mjs --dry-run seed/seed.json && node scripts/push-data.mjs --dry-run seed/private.seed.example.json && node scripts/push-data.mjs --dry-run seed/roles.json",
     "push-data": "node scripts/push-data.mjs"

@@ -49,7 +49,7 @@ export function buildInsights(
 ): Insights {
   const open = tasks.filter((task) => task.status === "open");
   const overdue = open.filter((task) =>
-    isOverdue(task.status, task.givenDate, today, task.flagAfterDays),
+    isOverdue(task.status, task.givenDate, today, task.flagAfterDays, task.longTerm),
   );
   const overdueByPerson = new Map<string, number>();
   for (const task of overdue) {
