@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { closedThisWeek, daysOpen, formatDay, isCarriedForward, isOverdue, kolkataDay } from "../lib/dates";
+import { addDays, closedThisWeek, daysOpen, formatDay, isCarriedForward, isOverdue, kolkataDay, weekBounds } from "../lib/dates";
 import { burst } from "../lib/burst";
 import { useHqContext } from "../lib/hq";
-import { orgSeat } from "../lib/orbit";
+import { BRAND_COLOR, ORG, loadLevel, orgSeat } from "../lib/orbit";
+import { AgeBadge } from "./ui/AgeBadge";
+import { TaskDrawer } from "./ui/TaskDrawer";
 import { collapseOpenTasks, taskLane, type ShownTask } from "../lib/tasks";
 import type { BrandId, Person, Task, TaskHistory } from "../lib/types";
 import { BRAND_IDS } from "../lib/types";
@@ -33,31 +35,27 @@ export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
   const hq = useHqContext();
   const today = kolkataDay();
   const people = [...hq.data.people].sort((a, b) => a.order - b.order);
-  const [personFilter, setPersonFilter] = useState("all");
   const [brandFilter, setBrandFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [onlyLate, setOnlyLate] = useState(false);
+  const [onlyLoose, setOnlyLoose] = useState(false);
+  const [view, setView] = useState<"matrix" | "radar">("matrix");
   const [query, setQuery] = useState("");
   const [dragOver, setDragOver] = useState<string | null>(null);
+  const [drawer, setDrawer] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [assignOpen, setAssignOpen] = useState(false);
 
   const collapsed = useMemo(() => collapseOpenTasks(hq.data.tasks), [hq.data.tasks]);
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return collapsed.filter(({ task }) => {
-      if (personFilter !== "all" && task.ownerId !== personFilter) return false;
-      if (brandFilter === "none" && task.brand) return false;
-      if (brandFilter !== "all" && brandFilter !== "none" && task.brand !== brandFilter) return false;
-      if (statusFilter === "open" && task.status !== "open") return false;
-      if (statusFilter === "done" && task.status !== "done") return false;
-      if (
-        statusFilter === "overdue" &&
-        !isOverdue(task.status, task.givenDate, today, task.flagAfterDays, task.longTerm)
-      ) {
-        return false;
-      }
+      if (brandFilter !== "all" && task.brand !== brandFilter) return false;
+      if (onlyLate && !isOverdue(task.status, task.givenDate, today, task.flagAfterDays, task.longTerm)) return false;
+      if (onlyLoose && task.ownerId !== "unassigned") return false;
       if (!needle) return true;
       return `${task.title} ${task.note}`.toLowerCase().includes(needle);
     });
-  }, [brandFilter, collapsed, personFilter, query, statusFilter, today]);
+  }, [brandFilter, collapsed, onlyLate, onlyLoose, query, today]);
 
   const mine =
     hq.personId && hq.personId !== "founder" && hq.personId !== "admin"
@@ -98,95 +96,230 @@ export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
       <div className="toolbar filters">
         <label>
           Search
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Title or note"
-            aria-label="Search tasks"
-          />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Title or note" aria-label="Search tasks" />
         </label>
-      </div>
-      <div className="filters" role="group" aria-label="Filter by brand">
-        <FilterChip pressed={brandFilter === "all"} onClick={() => setBrandFilter("all")}>All brands</FilterChip>
         {BRAND_IDS.map((id) => (
-          <FilterChip key={id} pressed={brandFilter === id} onClick={() => setBrandFilter(id)}>{id}</FilterChip>
+          <FilterChip key={id} pressed={brandFilter === id} onClick={() => setBrandFilter(brandFilter === id ? "all" : id)}>{id}</FilterChip>
         ))}
+        <FilterChip pressed={onlyLate} onClick={() => setOnlyLate((value) => !value)}>Only late</FilterChip>
+        <FilterChip pressed={onlyLoose} onClick={() => setOnlyLoose((value) => !value)}>Only no owner</FilterChip>
+        <FilterChip pressed={view === "matrix"} onClick={() => setView("matrix")}>Matrix</FilterChip>
+        <FilterChip pressed={view === "radar"} onClick={() => setView("radar")}>Due radar</FilterChip>
+        {hq.isAdmin ? <button type="button" className="primary" onClick={() => setAssignOpen(true)}>Assign task</button> : <span className="meta">Only an admin can assign.</span>}
       </div>
-      <div className="filters" role="group" aria-label="Filter by status">
-        <FilterChip pressed={statusFilter === "all"} onClick={() => setStatusFilter("all")}>All</FilterChip>
-        <FilterChip pressed={statusFilter === "open"} onClick={() => setStatusFilter("open")}>Open</FilterChip>
-        <FilterChip pressed={statusFilter === "overdue"} onClick={() => setStatusFilter("overdue")}>Overdue</FilterChip>
-        <FilterChip pressed={statusFilter === "done"} onClick={() => setStatusFilter("done")}>Done</FilterChip>
-      </div>
-      <div className="filters" role="group" aria-label="Filter by person">
-        <FilterChip pressed={personFilter === "all"} onClick={() => setPersonFilter("all")}>
-          All
-        </FilterChip>
-        {people.map((person) => (
-          <FilterChip
-            key={person.id}
-            pressed={personFilter === person.id}
-            onClick={() => setPersonFilter(person.id)}
-          >
-            {person.name}
-          </FilterChip>
-        ))}
-      </div>
-      <div className="kanban">
-        {(["todo", "doing", "waiting", "done"] as const).map((lane) => {
-          const tasks = visible.filter(({ task }) => {
-            if (taskLane(task) !== lane) return false;
-            if (lane === "done" && statusFilter !== "done" && !closedThisWeek(task.status, task.closedAt, today)) return false;
-            return true;
-          });
-          const title = lane === "todo" ? "To do" : lane === "doing" ? "Doing" : lane === "waiting" ? "Waiting" : "Done";
-          return (
-            <article
-              key={lane}
-              className={`person${dragOver === lane ? " is-drop" : ""}`}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setDragOver(lane);
-              }}
-              onDragLeave={() => setDragOver(null)}
-              onDrop={(event) => {
-                event.preventDefault();
-                setDragOver(null);
-                const taskId = event.dataTransfer.getData("text/task-id");
-                const task = hq.data.tasks.find((item) => item.id === taskId);
-                if (!task || taskLane(task) === lane) return;
-                const mine = Boolean(hq.personId && task.ownerId === hq.personId);
-                if (!hq.isAdmin && !(hq.isMember && mine)) return;
-                void hq.placeTask(task, lane)
-                  .then(() => {
-                    if (lane === "done") burst(event.clientX, event.clientY);
-                  })
-                  .catch(() => undefined);
-              }}
-            >
-              <header>
-                <h3>{title}</h3>
-                <p className="meta">{tasks.length}</p>
-              </header>
-              {tasks.length === 0 ? <p className="empty">None</p> : null}
-              <div className="stack">
-                {tasks.map(({ task, duplicateIds }) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    duplicateIds={duplicateIds}
-                    today={today}
-                    people={people}
-                    history={hq.data.history[task.id] ?? []}
-                    showOwner
-                  />
-                ))}
-              </div>
-            </article>
-          );
-        })}
-      </div>
+      {view === "matrix" ? (
+        <Matrix tasks={visible} people={people} today={today} dragOver={dragOver} setDragOver={setDragOver} expanded={expanded} setExpanded={setExpanded} onOpen={setDrawer} canDrag={hq.isAdmin} onMove={(task, column, ownerId) => {
+          const next = async () => {
+            if (ownerId && ownerId !== task.ownerId) await hq.reassignTask(task, ownerId);
+            if (column === "done") await hq.setTaskStatus(task, "done");
+            else if (column === "todo" || column === "doing" || column === "waiting") await hq.placeTask(task, column);
+          };
+          void next().then(() => { if (column === "done") burst(window.innerWidth / 2, 80); }).catch(() => undefined);
+        }} />
+      ) : (
+        <DueRadar tasks={visible} today={today} dragOver={dragOver} setDragOver={setDragOver} onOpen={setDrawer} canDrag={hq.isAdmin} onDue={(task, dueDate, summary) => {
+          void hq.saveTask({ ...task, dueDate, updatedAt: new Date().toISOString() }, summary).catch(() => undefined);
+        }} />
+      )}
+      {drawer ? <TaskDrawer taskId={drawer} onClose={() => setDrawer(null)} /> : null}
+      {assignOpen ? <AssignModal onClose={() => setAssignOpen(false)} /> : null}
     </section>
+  );
+}
+
+type MatrixCol = "todo" | "doing" | "waiting" | "overdue" | "done";
+
+function matrixColumn(task: Task, today: string): MatrixCol {
+  if (closedThisWeek(task.status, task.closedAt, today)) return "done";
+  if (isOverdue(task.status, task.givenDate, today, task.flagAfterDays, task.longTerm)) return "overdue";
+  const lane = taskLane(task);
+  if (lane === "doing" || lane === "waiting") return lane;
+  return "todo";
+}
+
+function Matrix({
+  tasks, people, today, dragOver, setDragOver, expanded, setExpanded, onOpen, canDrag, onMove,
+}: {
+  tasks: ShownTask[];
+  people: Person[];
+  today: string;
+  dragOver: string | null;
+  setDragOver: (id: string | null) => void;
+  expanded: string | null;
+  setExpanded: (id: string | null) => void;
+  onOpen: (id: string) => void;
+  canDrag: boolean;
+  onMove: (task: Task, column: MatrixCol, ownerId?: string) => void;
+}) {
+  const byId = new Map(people.map((person) => [person.id, person]));
+  const rows = [
+    ...ORG.map((seat) => byId.get(seat.id) ?? { id: seat.id, name: seat.name, role: seat.title, order: 0 }),
+    ...people.filter((person) => !ORG.some((seat) => seat.id === person.id) && person.id !== "everyone" && person.id !== "unassigned"),
+    ...people.filter((person) => person.id === "everyone"),
+    ...people.filter((person) => person.id === "unassigned"),
+  ];
+  const cols: [MatrixCol, string, boolean][] = [
+    ["todo", "To do", true],
+    ["doing", "Doing", true],
+    ["waiting", "Waiting", true],
+    ["overdue", "Overdue", false],
+    ["done", "Done this week", true],
+  ];
+  return (
+    <div className="sheet-wrap">
+      <table className="matrix">
+        <thead>
+          <tr>
+            <th>Person</th>
+            {cols.map(([, label]) => <th key={label}>{label}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((person) => {
+            const mine = tasks.filter((item) => item.task.ownerId === person.id);
+            const openCount = mine.filter((item) => item.task.status === "open").length;
+            return (
+              <tr key={person.id}>
+                <td className="who" style={person.id === "unassigned" ? { color: "var(--pink)" } : undefined}>
+                  {orgSeat(person.id)?.name ?? person.name}
+                  <div className="meta">{orgSeat(person.id)?.title ?? person.role}</div>
+                  <b style={{ color: loadLevel(openCount) === "overloaded" ? "var(--pink)" : loadLevel(openCount) === "busy" ? "var(--orange)" : "var(--ink)" }}>{openCount}</b>
+                </td>
+                {cols.map(([key, , canDrop]) => {
+                  const cell = mine.filter((item) => matrixColumn(item.task, today) === key);
+                  const open = expanded === `${person.id}:${key}`;
+                  const shown = key === "done" ? [] : open ? cell : cell.slice(0, 4);
+                  return (
+                    <td
+                      key={key}
+                      style={dragOver === `${person.id}:${key}` ? { outline: "2px solid var(--lime)" } : undefined}
+                      onDragOver={(event) => { if (canDrag && canDrop) { event.preventDefault(); setDragOver(`${person.id}:${key}`); } }}
+                      onDragLeave={() => setDragOver(null)}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        setDragOver(null);
+                        if (!canDrag || !canDrop) return;
+                        const task = tasks.find((item) => item.task.id === event.dataTransfer.getData("text/task-id"))?.task;
+                        if (!task) return;
+                        onMove(task, key, task.ownerId === person.id ? undefined : person.id);
+                      }}
+                    >
+                      {key === "done" && !open ? (
+                        <button type="button" className="chip" onClick={() => setExpanded(`${person.id}:${key}`)}>{cell.length}</button>
+                      ) : (
+                        <div className="stack">
+                          {shown.map(({ task }) => (
+                            <button
+                              key={task.id}
+                              type="button"
+                              className="chip-task"
+                              draggable={canDrag}
+                              title={task.title}
+                              style={{ boxShadow: task.brand ? `inset 3px 0 0 ${BRAND_COLOR[task.brand]}` : undefined }}
+                              onDragStart={(event) => event.dataTransfer.setData("text/task-id", task.id)}
+                              onClick={() => onOpen(task.id)}
+                            >
+                              <span>{task.title}</span>
+                              <AgeBadge task={task} today={today} />
+                            </button>
+                          ))}
+                          {cell.length > 4 ? (
+                            <button type="button" className="ghost" onClick={() => setExpanded(open ? null : `${person.id}:${key}`)}>{open ? "Show less" : `+${cell.length - 4}`}</button>
+                          ) : null}
+                        </div>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+type RadarCol = "late" | "today" | "tomorrow" | "week" | "later" | "none";
+
+function radarColumn(task: Task, today: string): RadarCol | null {
+  if (task.status !== "open") return null;
+  if (!task.dueDate) return "none";
+  if (task.dueDate < today) return "late";
+  if (task.dueDate === today) return "today";
+  if (task.dueDate === addDays(today, 1)) return "tomorrow";
+  const week = weekBounds(today);
+  if (task.dueDate <= week.end) return "week";
+  return "later";
+}
+
+function DueRadar({
+  tasks, today, dragOver, setDragOver, onOpen, canDrag, onDue,
+}: {
+  tasks: ShownTask[];
+  today: string;
+  dragOver: string | null;
+  setDragOver: (id: string | null) => void;
+  onOpen: (id: string) => void;
+  canDrag: boolean;
+  onDue: (task: Task, dueDate: string | null, summary: string) => void;
+}) {
+  const cols: [RadarCol, string, boolean][] = [
+    ["late", "Late", false],
+    ["today", "Today", true],
+    ["tomorrow", "Tomorrow", true],
+    ["week", "This week", true],
+    ["later", "Later", true],
+    ["none", "No date", true],
+  ];
+  return (
+    <div className="sheet-wrap">
+      {!canDrag ? <p className="meta">Only an admin can change a due date.</p> : null}
+      <table className="matrix">
+        <thead>
+          <tr>{cols.map(([, label]) => <th key={label}>{label === "No date" ? "Set a date" : label}</th>)}</tr>
+        </thead>
+        <tbody>
+          <tr>
+            {cols.map(([key, , canDrop]) => (
+              <td
+                key={key}
+                style={dragOver === key ? { outline: "2px solid var(--lime)" } : undefined}
+                onDragOver={(event) => { if (canDrag && canDrop) { event.preventDefault(); setDragOver(key); } }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragOver(null);
+                  if (!canDrag || !canDrop) return;
+                  const task = tasks.find((item) => item.task.id === event.dataTransfer.getData("text/task-id"))?.task;
+                  if (!task) return;
+                  const week = weekBounds(today);
+                  const due = key === "today" ? today : key === "tomorrow" ? addDays(today, 1) : key === "week" ? week.end : key === "later" ? addDays(today, 14) : null;
+                  onDue(task, due, due ? `Due ${due}` : "Cleared the due date");
+                }}
+              >
+                <div className="stack">
+                  {tasks.filter((item) => radarColumn(item.task, today) === key).map(({ task }) => (
+                    <button
+                      key={task.id}
+                      type="button"
+                      className="chip-task"
+                      draggable={canDrag}
+                      title={task.title}
+                      style={{ boxShadow: task.brand ? `inset 3px 0 0 ${BRAND_COLOR[task.brand]}` : undefined }}
+                      onDragStart={(event) => event.dataTransfer.setData("text/task-id", task.id)}
+                      onClick={() => onOpen(task.id)}
+                    >
+                      <span>{task.title}</span>
+                      <i className="meta">{orgSeat(task.ownerId)?.name ?? task.ownerId}</i>
+                    </button>
+                  ))}
+                </div>
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+    </div>
   );
 }
 
