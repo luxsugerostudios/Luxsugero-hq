@@ -92,6 +92,27 @@ Do this in the Firebase console (**Firestore → config → roles**) or by editi
 
 Hari Om's email has to be in **both** `admins` and `members` (value `hari-om`). An empty member value does not grant access. Publish `firestore.rules` before expecting the new permissions to apply.
 
+## Public view and Kraya
+
+The presentation route is `#/public` (for example `https://luxsugerostudios.github.io/Luxsugero-hq/#/public`). It reads only `public/snapshot`. That document has open, overdue, and shipped counts, brand names and status, crew first names and titles, task titles with owner first names, the orbit names, and Kraya stage counts. It has no emails, notes, history, inbox, prices, or lead names.
+
+A signed-in admin republishes `public/snapshot` from the dashboard. From the HQ machine, with the service-account JSON kept outside the repo:
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/outside/the/repo.json
+node scripts/publish-public-snapshot.mjs
+```
+
+Kraya itself is not called from the browser or from that script. The server sync writes `pipeline/skybox` and `pipeline/fnh` as `{ brand, source: "kraya", account, stages: [{ name, count }], total, syncedAt }`. Signed-in team members can read those docs. Everyone else sees the counts only after they are copied into `public/snapshot`.
+
+Publish the rules before the new reads and the snapshot write will succeed:
+
+```bash
+npx firebase-tools deploy --only firestore:rules --project luxsugero-hq
+```
+
+Human titles and who reports to whom live in `ORG` in `src/lib/orbit.ts`. Intern rotation dates live in `INTERN_ROTATION` in `src/lib/rotation.ts`. Agent `REPORTS_TO` lines are unchanged.
+
 Example after filling (do not commit this):
 
 ```json

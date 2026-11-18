@@ -7,16 +7,22 @@ import {
   BRAND_COLOR,
   BUCKET_IDS,
   LOAD_LABEL,
+  ORG,
   REPORTS_TO,
   agentState,
   brandOfAgent,
+  firstName,
   loadLevel,
+  orgSeat,
   planBalance,
+  reportsToName,
   type Assignment,
 } from "../lib/orbit";
 import type { OrbitAgent, OrbitCrew, OrbitFilter, OrbitScene } from "../lib/orbitScene";
 import { visibleTasks } from "../lib/tasks";
 import { actorName } from "./TasksPanel";
+
+const orbitScenePromise = import("../lib/orbitScene");
 
 type Panel = { kind: "node"; id: string } | { kind: "plan"; plan: Assignment[] } | null;
 
@@ -28,7 +34,7 @@ const STATE_SWATCH: Record<string, string> = {
   sync: "#4a4a62",
 };
 
-export function AgentOrbit() {
+export function AgentOrbit({ hero = false }: { hero?: boolean }) {
   const { data, isAdmin, reassignTask } = useHqContext();
   const today = kolkataDay();
   const tasks = visibleTasks(data.tasks);
@@ -77,23 +83,31 @@ export function AgentOrbit() {
   );
 
   const crewKey = load.map((row) => `${row.personId}:${row.count}`).join("|");
-  const crewView = useMemo<OrbitCrew[]>(
-    () =>
-      [...data.people]
-        .filter((person) => person.id !== "unassigned")
-        .sort((a, b) => a.order - b.order)
-        .map((person) => {
-          const count = loadOf(person.id);
-          return { id: person.id, name: person.name, count, level: loadLevel(count) };
-        }),
-    [data.people, crewKey],
-  );
+  const crewView = useMemo<OrbitCrew[]>(() => {
+    const known = new Set(data.people.map((person) => person.id));
+    const extras = ORG.filter((seat) => !known.has(seat.id)).map((seat) => ({
+      id: seat.id,
+      name: `${firstName(seat.name)} · ${seat.title}`,
+      count: 0,
+      level: loadLevel(0),
+    }));
+    const roster = [...data.people]
+      .filter((person) => person.id !== "unassigned")
+      .sort((a, b) => a.order - b.order)
+      .map((person) => {
+        const count = loadOf(person.id);
+        const seat = orgSeat(person.id);
+        const label = seat ? `${firstName(seat.name)} · ${seat.title}` : person.name;
+        return { id: person.id, name: label, count, level: loadLevel(count) };
+      });
+    return [...extras, ...roster];
+  }, [data.people, crewKey]);
   const cometKey = unowned.map((task) => task.id).join("|");
 
   useEffect(() => {
     let disposed = false;
     let scene: OrbitScene | null = null;
-    import("../lib/orbitScene")
+    orbitScenePromise
       .then(({ OrbitScene }) => {
         if (disposed || !canvasRef.current || !labelsRef.current) return;
         scene = new OrbitScene(canvasRef.current, labelsRef.current, {
@@ -136,6 +150,7 @@ export function AgentOrbit() {
   async function assign(taskId: string, personId: string): Promise<boolean> {
     const task = insights.unowned.find((item) => item.id === taskId);
     if (!task) return false;
+    if (!data.people.some((person) => person.id === personId)) return false;
     if (BUCKET_IDS.has(personId)) {
       setNote(`Pick a person, not the shared "${name(personId)}" bucket.`);
       return false;
@@ -191,12 +206,18 @@ export function AgentOrbit() {
       ? "Drag to spin. Click a pink shard (a task with no owner), then click a crew member."
       : "Drag to spin. Every open task has an owner.";
 
+  const overdueCount = insights.overdueByPerson.reduce((sum, row) => sum + row.count, 0);
+
   return (
-    <div className="orbit-wrap">
+    <div className={hero ? "orbit-wrap orbit-hero" : "orbit-wrap"}>
       <div className="stage">
         <canvas ref={canvasRef} className="orbit-canvas" aria-label="3D map of the team and AI agents. Drag to rotate. Use the list below for a text version." />
         <div ref={labelsRef} className="orbit-labels" aria-hidden="true" />
+        {!ready && !failed ? <p className="orbit-fallback">Loading the orbit…</p> : null}
         {failed ? <p className="orbit-fallback">The 3D view could not start in this browser. The agent list below has everything.</p> : null}
+        {hero ? (
+          <OrbitCaption open={insights.openCount} overdue={overdueCount} shipped={insights.closedThisWeek} />
+        ) : null}
         <div className="orbit-ctrls">
           {(["all", "ai", "crew"] as const).map((item) => (
             <button key={item} type="button" className="pillbtn" aria-pressed={filter === item} onClick={() => setFilter(item)}>
@@ -240,7 +261,7 @@ export function AgentOrbit() {
                 id={panel.id}
                 count={loadOf(panel.id)}
                 overdue={insights.overdueByPerson.find((row) => row.personId === panel.id)?.count ?? 0}
-                canGive={unowned.length > 0 && !BUCKET_IDS.has(panel.id)}
+                canGive={unowned.length > 0 && !BUCKET_IDS.has(panel.id) && data.people.some((person) => person.id === panel.id)}
                 onGive={() => {
                   const target = selected ?? unowned[0]?.id;
                   if (target) void assign(target, panel.id).then((ok) => ok && setNote(`Task handed to ${name(panel.id)}${isAdmin ? "." : ". Preview only."}`));
@@ -251,6 +272,19 @@ export function AgentOrbit() {
         ) : null}
       </div>
       {note ? <p className="orbit-note" role="status">{note}</p> : null}
+    </div>
+  );
+}
+
+export function OrbitCaption({ open, overdue, shipped }: { open: number; overdue: number; shipped: number }) {
+  return (
+    <div className="orbit-caption">
+      <p>Luxsugero HQ: humans + AI, one orbit</p>
+      <div className="row">
+        <span className="pillbtn">{open} open</span>
+        <span className="pillbtn">{overdue} overdue</span>
+        <span className="pillbtn">{shipped} shipped this week</span>
+      </div>
     </div>
   );
 }
@@ -311,13 +345,16 @@ function NodeCard({
 }) {
   const { data } = useHqContext();
   const person = data.people.find((item) => item.id === id);
-  if (person) {
+  const seat = orgSeat(id);
+  if (person || seat) {
     const level = loadLevel(count);
     const bucket = BUCKET_IDS.has(id);
+    const title = seat?.title || person?.role || "";
     return (
       <>
-        <p className="meta">Human{person.role ? ` · ${person.role}` : ""}</p>
-        <h3>{person.name}</h3>
+        <p className="meta">Human{title ? ` · ${title}` : ""}</p>
+        <h3>{seat?.name ?? person?.name}</h3>
+        {seat?.reportsTo ? <p className="meta">Reports to {reportsToName(seat.reportsTo)}</p> : null}
         {bucket ? <span className="state" style={{ background: "#6b6b88" }}>Shared bucket</span> : <span className={`state load-${level}`}>{LOAD_LABEL[level]}</span>}
         <dl>
           <dt>Open tasks</dt><dd>{count}</dd>

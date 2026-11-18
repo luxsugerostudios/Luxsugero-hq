@@ -46,6 +46,44 @@ export function agentState(agent: Agent, directives: Directive[]): AgentState {
   return "idle";
 }
 
+/**
+ * Human reporting line. Edit this when the org chart changes.
+ * Agent lines in REPORTS_TO below are separate and can stay as they are.
+ */
+export type OrgSeat = {
+  id: string;
+  name: string;
+  title: string;
+  reportsTo: string | null;
+};
+
+export const ORG: OrgSeat[] = [
+  { id: "abhay", name: "Abhay Bhati", title: "Director", reportsTo: null },
+  { id: "hari-om", name: "Hari Om Mishra", title: "Manager", reportsTo: "abhay" },
+  { id: "shrishti", name: "Shrishti", title: "Department Head", reportsTo: "hari-om" },
+  { id: "debo", name: "Debo", title: "Content Head", reportsTo: "hari-om" },
+  { id: "intikhab", name: "Intikhab", title: "Architect + Skybox Sales", reportsTo: "hari-om" },
+  { id: "megha", name: "Megha", title: "F&H Sales", reportsTo: "hari-om" },
+  { id: "mayank", name: "Mayank", title: "Intern", reportsTo: "shrishti" },
+  { id: "siddhant", name: "Siddhant", title: "Intern", reportsTo: "debo" },
+];
+
+export function orgSeat(id: string): OrgSeat | undefined {
+  return ORG.find((seat) => seat.id === id);
+}
+
+export function reportsToName(id: string | null): string {
+  if (!id) return "";
+  return orgSeat(id)?.name ?? "";
+}
+
+/** First word of a display name. Emails and extra tokens are dropped. */
+export function firstName(name: string): string {
+  const word = name.trim().split(/\s+/)[0] ?? "";
+  if (!word || word.includes("@")) return "";
+  return word.slice(0, 40);
+}
+
 /** Who each agent reports to. Brand PMs and department heads report to HQ. */
 export const REPORTS_TO: Record<string, string> = {
   "hq-main": "Founder",

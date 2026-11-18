@@ -8,6 +8,7 @@ function task(partial: Partial<Task> & Pick<Task, "id" | "ownerId" | "status" | 
     title: partial.id,
     dueDate: null,
     closedAt: null,
+    lane: null,
     longTerm: false,
     flagAfterDays: null,
     note: "",

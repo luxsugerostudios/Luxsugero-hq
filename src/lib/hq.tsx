@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -41,10 +42,13 @@ import {
   mapPrivateLead,
   mapTask,
 } from "./map";
+import { mapPipeline } from "./pipeline";
+import { buildPublicSnapshot, snapshotContentKey } from "./publicSnapshot";
 import type {
   DashboardData,
   Directive,
   InboxItem,
+  Lane,
   Lead,
   PrivateLead,
   RolesDoc,
@@ -84,6 +88,7 @@ export type HqValue = {
   signOutUser: () => Promise<void>;
   saveTask: (task: Task, summary?: string) => Promise<void>;
   setTaskStatus: (task: Task, status: Task["status"]) => Promise<void>;
+  placeTask: (task: Task, lane: Lane) => Promise<void>;
   setTaskNote: (task: Task, note: string) => Promise<void>;
   reassignTask: (task: Task, ownerId: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
@@ -231,6 +236,7 @@ export function HqProvider({ children }: { children: ReactNode }) {
         privateLeads: prev.privateLeads,
         inbox: prev.inbox,
         history: prev.history,
+        pipelines: prev.pipelines,
       }));
       setPhase("live");
     };
@@ -320,6 +326,51 @@ export function HqProvider({ children }: { children: ReactNode }) {
       unsubHistory();
     };
   }, [services, phase]);
+
+  useEffect(() => {
+    if (!services || phase !== "live" || (!isAdmin && !isMember)) return;
+    const db = services.db;
+    const listen = (id: "skybox" | "fnh") =>
+      onSnapshot(
+        doc(db, "pipeline", id),
+        (snap) => {
+          const board = snap.exists() ? mapPipeline(id, snap.data()) : null;
+          setData((prev) => {
+            const rest = prev.pipelines.filter((item) => item.id !== id);
+            return { ...prev, pipelines: board ? [...rest, board] : rest };
+          });
+        },
+        () => {
+          setData((prev) => ({ ...prev, pipelines: prev.pipelines.filter((item) => item.id !== id) }));
+        },
+      );
+    const unsubs = [listen("skybox"), listen("fnh")];
+    return () => {
+      for (const unsub of unsubs) unsub();
+    };
+  }, [services, phase, isAdmin, isMember]);
+
+  const publishedKey = useRef("");
+  useEffect(() => {
+    if (!services || phase !== "live" || !isAdmin) return;
+    const snapshot = buildPublicSnapshot({
+      people: data.people,
+      tasks: data.tasks,
+      agents: data.agents,
+      brands: data.brands,
+      pipelines: data.pipelines,
+    });
+    const key = snapshotContentKey(snapshot);
+    if (key === publishedKey.current) return;
+    const handle = window.setTimeout(() => {
+      publishedKey.current = key;
+      void setDoc(doc(services.db, "public", "snapshot"), snapshot).catch((error: unknown) => {
+        publishedKey.current = "";
+        setActionError(readable(error));
+      });
+    }, 1200);
+    return () => window.clearTimeout(handle);
+  }, [services, phase, isAdmin, data.people, data.tasks, data.agents, data.brands, data.pipelines]);
 
   useEffect(() => {
     if (!services || !user || phase !== "live") {
@@ -426,6 +477,7 @@ export function HqProvider({ children }: { children: ReactNode }) {
         givenDate: task.givenDate,
         dueDate: task.dueDate,
         status: task.status,
+        lane: task.lane,
         closedAt: task.closedAt,
         longTerm: task.longTerm,
         flagAfterDays: task.flagAfterDays,
@@ -495,6 +547,7 @@ export function HqProvider({ children }: { children: ReactNode }) {
         const closedAt = status === "done" ? updatedAt : null;
         await updateDoc(doc(services.db, "tasks", task.id), {
           status,
+          lane: status === "done" ? "done" : "todo",
           closedAt,
           updatedAt,
         }).catch((error: unknown) => {
@@ -502,6 +555,27 @@ export function HqProvider({ children }: { children: ReactNode }) {
           throw error;
         });
         await writeHistory(task.id, "status", status === "done" ? "Marked done" : "Reopened");
+      },
+      async placeTask(task, lane) {
+        const mine = Boolean(personId && task.ownerId === personId);
+        if (!services || (!isAdmin && !(isMember && mine))) {
+          const message = "You can only move your own tasks.";
+          setActionError(message);
+          throw new Error(message);
+        }
+        const updatedAt = new Date().toISOString();
+        const status = lane === "done" ? "done" : "open";
+        await updateDoc(doc(services.db, "tasks", task.id), {
+          status,
+          lane,
+          closedAt: status === "done" ? updatedAt : null,
+          updatedAt,
+        }).catch((error: unknown) => {
+          setActionError(readable(error));
+          throw error;
+        });
+        const label = lane === "todo" ? "To do" : lane === "doing" ? "Doing" : lane === "waiting" ? "Waiting" : "Done";
+        await writeHistory(task.id, "status", `Moved to ${label}`);
       },
       async setTaskNote(task, note) {
         if (!services || (!isAdmin && !isMember)) {
@@ -606,6 +680,7 @@ export function HqProvider({ children }: { children: ReactNode }) {
           givenDate: kolkataDay(),
           dueDate: item.dueDate,
           status: "open",
+          lane: "todo",
           closedAt: null,
           longTerm: false,
           flagAfterDays: null,
@@ -648,6 +723,7 @@ export function HqProvider({ children }: { children: ReactNode }) {
           givenDate: kolkataDay(),
           dueDate: item.dueDate,
           status: "open",
+          lane: "todo",
           closedAt: null,
           longTerm: false,
           flagAfterDays: null,

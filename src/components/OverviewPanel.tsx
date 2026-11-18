@@ -1,11 +1,15 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { kolkataDay } from "../lib/dates";
+import { AgentOrbit } from "./AgentOrbit";
+import { diffDays, formatStamp, kolkataDay } from "../lib/dates";
 import { buildInsights } from "../lib/insights";
 import { useHqContext } from "../lib/hq";
 import { visibleTasks } from "../lib/tasks";
 import { BRAND_STATUS_LABEL } from "../lib/labels";
-import { BRAND_COLOR, BUCKET_IDS, loadLevel } from "../lib/orbit";
+import { BRAND_COLOR, BUCKET_IDS, loadLevel, orgSeat } from "../lib/orbit";
+import { rotationReports } from "../lib/rotation";
 import { actorName } from "./TasksPanel";
+
+void import("../lib/orbitScene");
 
 type Signal = { kind: "risk" | "signal" | "info"; text: string };
 
@@ -44,8 +48,9 @@ export function OverviewPanel() {
   const weekDelta = insights.closedThisWeek - insights.closedLastWeek;
   const syncing = data.agents.filter((agent) => agent.focus.trim().toLowerCase() === "awaiting first sync").length;
   const skyboxBrand = data.brands.find((brand) => brand.id === "skybox");
-  const funnel = insights.skybox ?? [];
-  const funnelMax = Math.max(1, ...funnel.map((row) => row.count));
+  const kraya = data.pipelines.find((board) => board.id === "skybox") ?? null;
+  const funnelMax = Math.max(1, ...(kraya?.stages.map((row) => row.count) ?? [1]));
+  const rotation = rotationReports(visibleTasks(data.tasks), today);
 
   const openRead = (() => {
     const parts: string[] = [];
@@ -63,25 +68,6 @@ export function OverviewPanel() {
     }
     if (unownedCount > 0) parts.push("Balance them in the Agents orbit.");
     return parts.join(" ");
-  })();
-
-  const funnelRead = (() => {
-    if (funnel.length === 0) return null;
-    const count = (stage: string) => funnel.find((row) => row.stage === stage)?.count ?? 0;
-    const contacted = count("contacted");
-    const meet = count("meet_booked");
-    const proposal = count("proposal");
-    const deposit = count("deposit") + count("won");
-    if (contacted > 0 && meet + proposal + deposit === 0) {
-      return `${contacted} leads contacted and none moved to a meeting yet.`;
-    }
-    if (meet > 0 && proposal + deposit === 0) {
-      return `Leads stall after the meeting: ${plural(meet, "meeting", "meetings")} booked, no proposals out. A proposal template would unblock this.`;
-    }
-    if (proposal > 0 && deposit === 0) {
-      return `${plural(proposal, "proposal is", "proposals are")} out with no deposit yet. Time for a follow-up.`;
-    }
-    return `${plural(deposit, "lead has", "leads have")} reached deposit or won.`;
   })();
 
   const signals: Signal[] = [];
@@ -106,6 +92,7 @@ export function OverviewPanel() {
 
   return (
     <section aria-labelledby="overview-heading" className="pulse">
+      <AgentOrbit hero />
       <Ticker signals={signals} />
       <div className="section-head big-head">
         <h2 id="overview-heading">Studio pulse</h2>
@@ -178,18 +165,17 @@ export function OverviewPanel() {
 
         <Tile className="t-orange">
           <h3>Luxskybox pipeline</h3>
-          {funnel.length === 0 ? <p>No Skybox leads yet.</p> : null}
+          {!kraya ? <p>Waiting for Kraya sync</p> : null}
+          {kraya?.syncedAt ? <p className="meta-dark">Synced from Kraya {formatStamp(kraya.syncedAt)}</p> : null}
           <div className="funnel-bars">
-            {funnel.map((row) => (
-              <div className="fr" key={row.stage}>
-                <span>{row.stage.replaceAll("_", " ")}</span>
+            {kraya?.stages.map((row) => (
+              <div className="fr" key={row.name}>
+                <span>{row.name}</span>
                 <span className="fbar"><span style={{ width: `${(row.count / funnelMax) * 100}%` }} /></span>
-                <b title={row.conversion == null ? "" : `${Math.round(row.conversion * 100)}% from previous`}>{row.count}</b>
+                <b>{row.count}</b>
               </div>
             ))}
           </div>
-          {insights.skyboxLost > 0 ? <p className="meta-dark">{insights.skyboxLost} lost.</p> : null}
-          {funnelRead ? <p className="read">{funnelRead}</p> : null}
         </Tile>
 
         <Tile className="t-crew">
@@ -200,7 +186,7 @@ export function OverviewPanel() {
               .filter((row) => row.personId !== "unassigned")
               .map((row) => (
                 <div className="cr" key={row.personId}>
-                  <span>{name(row.personId)}</span>
+                  <span>{orgSeat(row.personId) ? `${orgSeat(row.personId)?.name} · ${orgSeat(row.personId)?.title}` : name(row.personId)}</span>
                   <span className="cbar">
                     <span className={`load-${loadLevel(row.count)}`} style={{ width: `${Math.max((row.count / maxLoad) * 100, row.count ? 6 : 2)}%` }} />
                   </span>
@@ -236,6 +222,21 @@ export function OverviewPanel() {
               </article>
             ))}
           </div>
+        </Tile>
+
+        <Tile className="t-panel">
+          <h3>Intern rotation</h3>
+          <p className="meta">{rotation.daysLeft} days left · day {rotation.day} of {diffDays(rotation.start, rotation.end)}</p>
+          {rotation.interns.map((intern) => (
+            <div key={intern.id} className="stack">
+              <p><b>{intern.name}</b> · {intern.title} · reports to {intern.reportsTo}</p>
+              <p className="meta">{intern.done} of {intern.total} done{intern.strongest ? ` · strongest in ${intern.strongest}` : ""}</p>
+              {intern.brands.map((row) => (
+                <p key={row.brand} className="meta">{row.brand}: {row.done} done of {row.total}</p>
+              ))}
+            </div>
+          ))}
+          <p className="read">Planned department assignment is decided after day 45. Dates are set in INTERN_ROTATION.</p>
         </Tile>
       </div>
     </section>
