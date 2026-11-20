@@ -241,6 +241,11 @@ export function PublicCockpit({ snapshot, user }: { snapshot: PublicSnapshot; us
   const closeDock = (id: DockId) => setDock((cur) => (cur.id === id && !cur.pinned ? { id: null, pinned: false } : cur));
   const pinDock = (id: DockId) => setDock((cur) => (cur.id === id && cur.pinned ? { id: null, pinned: false } : { id, pinned: true }));
 
+  // Clicking the search icon puts the cursor straight in the box.
+  useEffect(() => {
+    if (dock.id === "find" && dock.pinned) document.getElementById("cp-search")?.focus();
+  }, [dock.id, dock.pinned]);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -377,7 +382,7 @@ export function PublicCockpit({ snapshot, user }: { snapshot: PublicSnapshot; us
             value={query}
             autoComplete="off"
             onChange={(event) => setQuery(event.target.value)}
-            onFocus={() => pinDock("find")}
+            onFocus={() => setDock({ id: "find", pinned: true })}
           />
           {results.length ? (
             <ul className="cp-results">

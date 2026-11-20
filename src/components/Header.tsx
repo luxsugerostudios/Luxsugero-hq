@@ -16,6 +16,7 @@ export function Header({
 }) {
   const { configured, user, access, signIn, signOutUser } = useHqContext();
   const [copied, setCopied] = useState(false);
+  const [density, setDensity] = useState(() => document.documentElement.dataset.density ?? "comfortable");
   const role =
     access === "admin" ? "Admin" : access === "member" ? "Member" : access === "guest" ? "Not on the roster" : "Public";
 
@@ -27,12 +28,13 @@ export function Header({
         type="button"
         className="ghost"
         onClick={() => {
-          const next = document.documentElement.dataset.density === "compact" ? "comfortable" : "compact";
+          const next = density === "compact" ? "comfortable" : "compact";
           document.documentElement.dataset.density = next;
+          setDensity(next);
           try { localStorage.setItem("hq-density", next); } catch { /* ignore */ }
         }}
       >
-        {document.documentElement.dataset.density === "compact" ? "Comfortable" : "Compact"}
+        {density === "compact" ? "Comfortable" : "Compact"}
       </button>
       {showAssign && onAssign ? (
         <button type="button" className="primary assign-top" onClick={onAssign}>
