@@ -14,7 +14,7 @@ test("public seed plans the roster and anonymous skybox leads", () => {
   const { errors, ops } = buildPlan(readJson("seed/seed.json"));
   assert.deepEqual(errors, []);
   const count = (prefix) => ops.filter((op) => op.path.startsWith(prefix)).length;
-  assert.equal(count("people/"), 9);
+  assert.equal(count("people/"), 10);
   assert.equal(count("tasks/"), 10);
   assert.equal(count("agents/"), 18);
   assert.equal(count("brands/"), 4);

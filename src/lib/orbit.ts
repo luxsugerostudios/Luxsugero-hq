@@ -64,6 +64,7 @@ export const ORG: OrgSeat[] = [
   { id: "debo", name: "Debo", title: "Content Head", reportsTo: "hari-om" },
   { id: "intikhab", name: "Intikhab", title: "Architect + Skybox Sales", reportsTo: "hari-om" },
   { id: "megha", name: "Megha", title: "F&H Sales", reportsTo: "hari-om" },
+  { id: "gaurav", name: "Gaurav Choudhary", title: "Skybox Sales Lead (International)", reportsTo: "hari-om" },
   { id: "mayank", name: "Mayank", title: "Intern", reportsTo: "shrishti" },
   { id: "siddhant", name: "Siddhant", title: "Intern", reportsTo: "debo" },
 ];
