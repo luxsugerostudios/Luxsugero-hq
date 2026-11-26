@@ -5,6 +5,7 @@ import { orgSeat } from "../../lib/orbit";
 import { LANES } from "../../lib/types";
 import { actorName } from "../TasksPanel";
 import { PersonPicker } from "./PersonPicker";
+import { Attachments } from "./Attachments";
 
 export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () => void }) {
   const hq = useHqContext();
@@ -92,6 +93,8 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
           </label>
           {canUpdate ? <button type="submit" className="ghost">Save note</button> : null}
         </form>
+        <h4>Attachments</h4>
+        <Attachments parentType="task" parentId={task.id} canAdd={canUpdate} />
         {hq.isAdmin ? (
           <>
             <p className="meta">Reassign</p>
