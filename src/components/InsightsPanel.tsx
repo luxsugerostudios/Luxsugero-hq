@@ -2,6 +2,8 @@ import { useState } from "react";
 import { diffDays, formatDay, isOverdue, kolkataDay } from "../lib/dates";
 import { PERIODS, brandStats, findFlags, kpis, personStats, projectBacklog, suggestions, trimLeadingEmpty, weeklySeries, windowFor, type PeriodId } from "../lib/analytics";
 import { BacklogChart, BrandBars, FlowChart, Timeline } from "./insights/Charts";
+import { PersonReview } from "./insights/PersonReview";
+import { TaskDrawer } from "./ui/TaskDrawer";
 import { useHqContext } from "../lib/hq";
 import { buildHqNotes, type HqNotes } from "../lib/observations";
 import { KRAYA_BRANDS, KRAYA_LABEL, type KrayaBrand } from "../lib/pipeline";
@@ -188,6 +190,7 @@ export function InsightsPanel() {
   const [period, setPeriod] = useState<PeriodId>("15");
   const [busy, setBusy] = useState<"" | "pdf" | "send">("");
   const [note, setNote] = useState("");
+  const [drawer, setDrawer] = useState<string | null>(null);
   const m = useInsightsModel(period);
   const { k, kPrev, today } = m;
   const tasks = m.tasks;
@@ -322,6 +325,8 @@ export function InsightsPanel() {
         </article>
       </div>
 
+      <PersonReview today={today} onOpen={setDrawer} />
+
       <article className="ix-card">
         <h3>People</h3>
         <div className="ix-table-wrap">
@@ -387,6 +392,7 @@ export function InsightsPanel() {
       </div>
       <AttentionBoard tasks={tasks} today={today} notes={notes} showPeople={false} />
       <p className="meta">Updated {formatDay(today)}. Counted from the records in HQ.</p>
+      {drawer ? <TaskDrawer taskId={drawer} onClose={() => setDrawer(null)} /> : null}
     </section>
   );
 }
