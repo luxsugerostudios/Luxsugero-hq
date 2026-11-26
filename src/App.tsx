@@ -137,7 +137,7 @@ function Shell() {
           {!loading && nav === "pipeline" ? <PipelinePanel /> : null}
           {!loading && nav === "insights" ? <InsightsPanel /> : null}
           {!loading && nav === "agents" ? <AgentsPanel /> : null}
-          {hq.isAdmin ? (
+          {hq.isAdmin && nav !== "board" && nav !== "mine" ? (
             <button type="button" className="primary assign-fab" onClick={() => setAssignOpen(true)}>
               + Assign task
             </button>
