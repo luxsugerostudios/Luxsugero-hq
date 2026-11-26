@@ -29,7 +29,7 @@ export type InternReport = {
 };
 
 export function rotationInterns(org: OrgSeat[] = ORG): OrgSeat[] {
-  return org.filter((seat) => /^intern\b/i.test(seat.title));
+  return org.filter((seat) => /\b(intern|trainee)\b/i.test(seat.title));
 }
 
 export function rotationClock(today: string, start = INTERN_ROTATION.start, end = INTERN_ROTATION.end) {

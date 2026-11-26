@@ -6,6 +6,7 @@ import { BRAND_COLOR, ORG, firstName, loadLevel, orgSeat } from "../lib/orbit";
 import { AgeBadge } from "./ui/AgeBadge";
 import { TaskDrawer } from "./ui/TaskDrawer";
 import { OwnerSelect } from "./ui/OwnerSelect";
+import { BalancePanel } from "./ui/BalancePanel";
 import { QuickAssign, TaskList, sortForDesk } from "./TaskList";
 import { collapseOpenTasks, taskLane, type ShownTask } from "../lib/tasks";
 
@@ -49,6 +50,7 @@ export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [balanceOpen, setBalanceOpen] = useState(false);
 
   const collapsed = useMemo(() => collapseOpenTasks(hq.data.tasks), [hq.data.tasks]);
   const late = (task: Task) => isOverdue(task.status, task.givenDate, today, task.flagAfterDays, task.longTerm);
@@ -150,12 +152,16 @@ export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
         <p className="banner" role="status">Ask the founder to add your email.</p>
       ) : null}
       {hq.isAdmin ? <QuickAssign today={today} /> : null}
-      {hq.isAdmin && counts.loose > 0 && show !== "loose" ? (
+      {hq.isAdmin && counts.loose > 0 ? (
         <p className="desk-alert" role="status">
           <b>{counts.loose}</b> {counts.loose === 1 ? "task has" : "tasks have"} no owner.
-          <button type="button" className="ghost" onClick={() => { setShow("loose"); setView("list"); }}>Show them</button>
+          {show !== "loose" ? (
+            <button type="button" className="ghost" onClick={() => { setShow("loose"); setView("list"); }}>Show them</button>
+          ) : null}
+          <button type="button" className="primary" onClick={() => setBalanceOpen(true)}>Auto-balance</button>
         </p>
       ) : null}
+      {balanceOpen ? <BalancePanel tasks={hq.data.tasks} onClose={() => setBalanceOpen(false)} /> : null}
       <div className="toolbar filters">
         <label>
           Search

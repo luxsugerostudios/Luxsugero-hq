@@ -1192,3 +1192,17 @@ input, select, textarea { min-height: var(--control); }
   .su-rows li { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .su-rows li > input:first-child { grid-column: 1 / -1; }
 }
+
+/* ---------- Auto-balance review ---------- */
+.desk-alert .primary { background: var(--ink); color: var(--surface); }
+.drawer.balance { width: min(760px, 100vw); }
+.bal-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.bal-list li { display: grid; grid-template-columns: 24px minmax(0, 1fr) 210px; gap: 10px; align-items: center; background: var(--surface-2); border-radius: var(--radius-item); padding: 8px 10px; }
+.bal-list li.is-off { opacity: 0.5; }
+.bal-list input[type="checkbox"] { width: 18px; height: 18px; min-height: 0; accent-color: var(--lime); }
+.bal-task { display: grid; gap: 2px; min-width: 0; }
+.bal-task b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 640px) {
+  .bal-list li { grid-template-columns: 24px minmax(0, 1fr); }
+  .bal-list li select { grid-column: 2; }
+}

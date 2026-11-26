@@ -84,8 +84,8 @@ test("the public snapshot keeps first names and drops notes, money, and emails",
   assert.equal(body.includes("hari-om"), false);
   assert.equal(body.includes("Skyboxbylux"), false);
   assert.equal(snapshot.tasks.some((row) => row.title === "Layout the deck" && row.owner === "Hari"), true);
-  assert.equal(snapshot.crew.find((row) => row.name === "Hari")?.title, "Manager");
-  assert.equal(snapshot.crew.some((row) => row.name === "Abhay" && row.title === "Director"), true);
+  assert.equal(snapshot.crew.find((row) => row.name === "Hari")?.title, "Operations & Automation Head · Project Head");
+  assert.equal(snapshot.crew.some((row) => row.name === "Abhay" && row.title === "Director & Founder"), true);
   assert.deepEqual(snapshot.pipeline[0].stages, [{ name: "New Lead", count: 4 }, { name: "Won", count: 1 }]);
   assert.equal(snapshot.pipeline[1].stages.length, 0);
   assert.equal(snapshot.brands[0].status, "active");
