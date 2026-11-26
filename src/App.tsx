@@ -9,6 +9,7 @@ import { AssignModal, TasksPanel } from "./components/TasksPanel";
 import { visibleTasks } from "./lib/tasks";
 import { PublicView } from "./components/PublicView";
 import { StandupsPanel } from "./components/StandupsPanel";
+import { UpdateBanner } from "./components/UpdateBanner";
 import { HqProvider, useHqContext } from "./lib/hq";
 
 void import("./lib/orbitScene");
@@ -43,11 +44,17 @@ export function App() {
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
-  if (pub) return <PublicView />;
   return (
-    <HqProvider>
-      <Shell />
-    </HqProvider>
+    <>
+      <UpdateBanner />
+      {pub ? (
+        <PublicView />
+      ) : (
+        <HqProvider>
+          <Shell />
+        </HqProvider>
+      )}
+    </>
   );
 }
 
