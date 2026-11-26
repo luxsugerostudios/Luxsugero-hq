@@ -177,6 +177,7 @@ export function TaskList({
         delete next[task.id];
         return next;
       });
+      if (draft.lane === "done" && taskLane(task) !== "done") burst(window.innerWidth / 2, 120);
       const where =
         draft.lane === "done"
           ? "It is under Done this week."
@@ -236,23 +237,13 @@ export function TaskList({
               <input
                 type="checkbox"
                 className="tl-check"
-                checked={task.status === "done"}
-                disabled={!canUpdate || dirty}
-                title={dirty ? "Save or cancel your changes first" : undefined}
-                aria-label={task.status === "done" ? `Reopen ${task.title}` : `Mark ${task.title} done`}
+                checked={draft.lane === "done"}
+                disabled={!canUpdate}
+                title={draft.lane === "done" ? "Untick to reopen, then Save" : "Tick, then Save to mark done"}
+                aria-label={draft.lane === "done" ? `Reopen ${task.title}` : `Mark ${task.title} done`}
                 onChange={(event) => {
                   const done = event.target.checked;
-                  if (done) burst(event.target.getBoundingClientRect().left, event.target.getBoundingClientRect().top);
-                  void hq
-                    .setTaskStatus(task, done ? "done" : "open")
-                    .then(() =>
-                      say({
-                        text: done ? `Marked done: ${task.title}. It is under Done this week.` : `Reopened: ${task.title}.`,
-                        taskId: task.id,
-                        undo: () => void (done ? hq.placeTask({ ...task, status: "done" }, taskLane(task)) : hq.setTaskStatus({ ...task, status: "open" }, "done")).catch(() => undefined),
-                      }),
-                    )
-                    .catch(() => undefined);
+                  edit({ lane: done ? "done" : base.lane === "done" ? "todo" : base.lane });
                 }}
               />
               <button type="button" className="tl-title" title="Open notes and history" onClick={() => onOpen(task.id)}>
