@@ -41,6 +41,7 @@ import {
   mapPerson,
   mapPrivateLead,
   mapStandup,
+  mapAttachment,
   mapTask,
 } from "./map";
 import { mapPipeline } from "./pipeline";
@@ -54,6 +55,7 @@ import type {
   PrivateLead,
   RolesDoc,
   Standup,
+  Attachment,
   Task,
 } from "./types";
 import { EMPTY_DASHBOARD } from "./types";
@@ -103,6 +105,8 @@ export type HqValue = {
   saveDirective: (directive: Directive) => Promise<void>;
   saveStandup: (standup: Standup) => Promise<void>;
   deleteStandup: (id: string) => Promise<void>;
+  addAttachment: (item: Attachment) => Promise<void>;
+  deleteAttachment: (id: string) => Promise<void>;
 };
 
 const HqContext = createContext<HqValue | null>(null);
@@ -336,6 +340,16 @@ export function HqProvider({ children }: { children: ReactNode }) {
       unsubHistory();
     };
   }, [services, phase]);
+
+  // Attachments: links to Drive files on tasks and standups.
+  useEffect(() => {
+    if (!services || phase !== "live" || (!isAdmin && !isMember)) return;
+    return onSnapshot(
+      collection(services.db, "attachments"),
+      (snap) => setData((prev) => ({ ...prev, attachments: mapped(snap.docs, mapAttachment).sort((a, b) => a.addedAt.localeCompare(b.addedAt)) })),
+      () => setData((prev) => ({ ...prev, attachments: [] })),
+    );
+  }, [services, phase, isAdmin, isMember]);
 
   // Standup log: team can read, admins write. Empty until the rule is published.
   useEffect(() => {
@@ -828,6 +842,31 @@ export function HqProvider({ children }: { children: ReactNode }) {
             setActionError(readable(error));
             throw error;
           });
+      },
+      async addAttachment(item) {
+        if (!services || (!isAdmin && !isMember)) {
+          const message = "Sign in with a team account to attach files.";
+          setActionError(message);
+          throw new Error(message);
+        }
+        await setDoc(doc(services.db, "attachments", item.id), { ...item }).catch((error: unknown) => {
+          const message = codeOf(error).includes("permission")
+            ? "Attachments are not switched on yet. Publish the latest firestore.rules in the Firebase console."
+            : readable(error);
+          setActionError(message);
+          throw error;
+        });
+      },
+      async deleteAttachment(id) {
+        if (!services || !isAdmin) {
+          const message = "Only an admin can remove an attachment.";
+          setActionError(message);
+          throw new Error(message);
+        }
+        await deleteDoc(doc(services.db, "attachments", id)).catch((error: unknown) => {
+          setActionError(readable(error));
+          throw error;
+        });
       },
       async deleteStandup(id) {
         if (!services || !isAdmin) {

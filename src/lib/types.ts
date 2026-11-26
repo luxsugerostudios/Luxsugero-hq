@@ -144,6 +144,17 @@ export type PrivateLead = {
   phone: string;
 };
 
+/** A link (usually a Google Drive file) attached to a task or a standup. */
+export type Attachment = {
+  id: string;
+  parentType: "task" | "standup";
+  parentId: string;
+  name: string;
+  url: string;
+  addedBy: string;
+  addedAt: string;
+};
+
 /** A daily standup summary logged by an admin (founder, Hari Om, Shrishti). */
 export type Standup = {
   id: string;
@@ -190,6 +201,7 @@ export type DashboardData = {
   history: Record<string, TaskHistory[]>;
   pipelines: PipelineBoard[];
   standups: Standup[];
+  attachments: Attachment[];
 };
 
 export const EMPTY_DASHBOARD: DashboardData = {
@@ -204,4 +216,5 @@ export const EMPTY_DASHBOARD: DashboardData = {
   history: {},
   pipelines: [],
   standups: [],
+  attachments: [],
 };

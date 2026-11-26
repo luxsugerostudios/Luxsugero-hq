@@ -303,6 +303,26 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Links (usually Google Drive) attached to tasks and standups.
+    function attachmentSafe(attachmentId) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['id', 'parentType', 'parentId', 'name', 'url', 'addedBy', 'addedAt'])
+        && d.id is string && d.id == attachmentId
+        && d.parentType in ['task', 'standup']
+        && d.parentId is string && d.parentId.size() > 0 && d.parentId.size() <= 120
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 120
+        && d.url is string && d.url.size() <= 800 && d.url.matches('^https://.+')
+        && d.addedBy is string && d.addedBy.size() <= 60
+        && d.addedAt is string;
+    }
+
+    match /attachments/{attachmentId} {
+      allow read: if isTeam();
+      allow create: if isTeam() && attachmentSafe(attachmentId);
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
     match /config/roles {
       allow get: if isFounder()
         || (isVerified()

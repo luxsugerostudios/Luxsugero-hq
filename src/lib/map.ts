@@ -15,6 +15,7 @@ import {
   type DashboardData,
   type Directive,
   type DirectiveStatus,
+  type Attachment,
   type Standup,
   type Headline,
   type InboxItem,
@@ -192,6 +193,15 @@ export function mapPrivateLead(id: string, raw: unknown): PrivateLead | null {
   };
 }
 
+export function mapAttachment(id: string, raw: unknown): Attachment | null {
+  if (!isRecord(raw)) return null;
+  const parentType = raw.parentType === "task" || raw.parentType === "standup" ? raw.parentType : null;
+  const url = text(raw.url);
+  const parentId = text(raw.parentId);
+  if (!id || !parentType || !parentId || !url.startsWith("https://")) return null;
+  return { id, parentType, parentId, name: text(raw.name) || "Attachment", url, addedBy: text(raw.addedBy), addedAt: stamp(raw.addedAt) || "" };
+}
+
 export function mapStandup(id: string, raw: unknown): Standup | null {
   if (!isRecord(raw)) return null;
   const date = dateOnly(raw.date);
@@ -260,6 +270,7 @@ export function readDashboard(raw: unknown): DashboardData {
     history: {},
     pipelines: [],
     standups: [],
+    attachments: [],
   };
 }
 

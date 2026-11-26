@@ -62,7 +62,9 @@ function AgentCard({
   canEdit: boolean;
   onSave: (directive: Directive) => Promise<void>;
 }) {
-  const state = agentState(agent, directives);
+  const answerFor = (item: string) => directives.find((d) => d.text.startsWith(`Re: ${item}\n`));
+  const pending = agent.waitingOnFounder.filter((item) => !answerFor(item));
+  const state = agentState({ ...agent, waitingOnFounder: pending }, directives);
   return (
     <article className={`agent state-${state}`}>
       <header>
@@ -72,10 +74,10 @@ function AgentCard({
       <p className="focus">{agent.focus}</p>
       {agent.waitingOnFounder.length > 0 ? (
         <>
-          <h4>Waiting on founder</h4>
-          <ul>
+          <h4>Waiting on founder {pending.length ? <span className="wf-count">{pending.length} to answer</span> : <span className="wf-count done">all answered</span>}</h4>
+          <ul className="wf-list">
             {agent.waitingOnFounder.map((item) => (
-              <li key={item}>{item}</li>
+              <WaitingItem key={item} agentId={agent.id} item={item} answer={answerFor(item)} canEdit={canEdit} onSave={onSave} />
             ))}
           </ul>
         </>
@@ -88,6 +90,97 @@ function AgentCard({
         </details>
       ) : null}
     </article>
+  );
+}
+
+/**
+ * One thing an agent is waiting on. Approve in one click, or reply with a note
+ * (edits, conditions, a no). The answer goes to the agent as a directive.
+ */
+function WaitingItem({
+  agentId,
+  item,
+  answer,
+  canEdit,
+  onSave,
+}: {
+  agentId: string;
+  item: string;
+  answer: Directive | undefined;
+  canEdit: boolean;
+  onSave: (directive: Directive) => Promise<void>;
+}) {
+  const [mode, setMode] = useState<"idle" | "reply">("idle");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const send = (kind: "Approved" | "Reply", body = "") => {
+    const now = new Date().toISOString();
+    setBusy(true);
+    void onSave({
+      id: answer?.id ?? crypto.randomUUID(),
+      agentId,
+      text: `Re: ${item}\n${kind === "Approved" ? "Decision: Approved" : `Note: ${body}`}`,
+      status: "queued",
+      response: null,
+      createdAt: answer?.createdAt ?? now,
+      updatedAt: now,
+    })
+      .then(() => {
+        setMode("idle");
+        setNote("");
+      })
+      .catch(() => undefined)
+      .finally(() => setBusy(false));
+  };
+  const decided = answer?.text.split("\n").slice(1).join(" ").replace(/^Decision: /, "");
+  return (
+    <li className={answer ? "wf is-answered" : "wf"}>
+      <span className="wf-text">{item}</span>
+      {answer && mode === "idle" ? (
+        <span className="wf-answer">
+          <b>{decided?.startsWith("Approved") ? "✓ Approved" : "✎ Replied"}</b>
+          {decided && !decided.startsWith("Approved") ? <em>{decided.replace(/^Note: /, "")}</em> : null}
+          {answer.status !== "queued" ? <i>{DIRECTIVE_STATUS_LABEL[answer.status]}</i> : null}
+          {canEdit ? <button type="button" className="wf-link" onClick={() => { setNote(decided?.startsWith("Note: ") ? decided.slice(6) : ""); setMode("reply"); }}>Change</button> : null}
+        </span>
+      ) : null}
+      {canEdit && !answer && mode === "idle" ? (
+        <span className="wf-actions">
+          <button type="button" className="primary" disabled={busy} onClick={() => send("Approved")}>Approve</button>
+          <button type="button" className="ghost" disabled={busy} onClick={() => setMode("reply")}>Reply</button>
+        </span>
+      ) : null}
+      {canEdit && mode === "reply" ? (
+        <form
+          className="wf-reply"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (note.trim()) send("Reply", note.trim());
+          }}
+        >
+          <textarea
+            autoFocus
+            rows={2}
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                if (note.trim()) send("Reply", note.trim());
+              }
+              if (event.key === "Escape") setMode("idle");
+            }}
+            placeholder="Your answer, edits or conditions"
+            aria-label={`Reply about: ${item}`}
+          />
+          <span className="wf-actions">
+            <button type="submit" className="primary" disabled={busy || !note.trim()}>{busy ? "Sending…" : "Send"}</button>
+            {answer ? <button type="button" className="ghost" disabled={busy} onClick={() => send("Approved")}>Approve instead</button> : null}
+            <button type="button" className="ghost" onClick={() => setMode("idle")}>Cancel</button>
+          </span>
+        </form>
+      ) : null}
+    </li>
   );
 }
 

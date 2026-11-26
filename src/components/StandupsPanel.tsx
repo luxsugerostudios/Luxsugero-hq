@@ -5,6 +5,7 @@ import { orgSeat } from "../lib/orbit";
 import { parseStandup, type QuickDraft } from "../lib/quickAdd";
 import { makeTask } from "./TaskList";
 import { OwnerSelect, ownerLabel, useOwnerGroups } from "./ui/OwnerSelect";
+import { Attachments, LinkAdder, LinkList, type LinkDraft } from "./ui/Attachments";
 import { actorName } from "./TasksPanel";
 
 type Row = QuickDraft & { ownerId: string };
@@ -25,6 +26,7 @@ export function StandupsPanel() {
   const [saved, setSaved] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [links, setLinks] = useState<LinkDraft[]>([]);
 
   const roster = useMemo(
     () => hq.data.people.map((person) => ({ id: person.id, name: orgSeat(person.id)?.name ?? person.name })),
@@ -54,6 +56,11 @@ export function StandupsPanel() {
         updatedAt: now,
       });
       await Promise.all(
+        links.map((link) =>
+          hq.addAttachment({ id: crypto.randomUUID(), parentType: "standup", parentId: id, name: link.name, url: link.url, addedBy: hq.personId ?? "admin", addedAt: new Date().toISOString() }),
+        ),
+      );
+      await Promise.all(
         rows
           .filter((row) => row.title.trim())
           .map((row) =>
@@ -76,6 +83,7 @@ export function StandupsPanel() {
       setSummary("");
       setLines("");
       setRows([]);
+      setLinks([]);
     } catch {
       /* the banner already shows the reason */
     } finally {
@@ -124,6 +132,11 @@ export function StandupsPanel() {
               placeholder={"Shrishti: ads live by 6 PM #skybox today\nGaurav: Woodman costing tomorrow\nEveryone: Google Business Profile 30 Nov"}
             />
           </label>
+          <div className="su-att">
+            <p className="su-label">Attachments (minutes, sheets, decks)</p>
+            <LinkList items={links.map((link, i) => ({ key: String(i), name: link.name, url: link.url }))} onRemove={(key) => setLinks((current) => current.filter((_, i) => String(i) !== key))} />
+            <LinkAdder onAdd={(link) => setLinks((current) => [...current, link])} />
+          </div>
           <p className="meta">Start a line with a name and a colon to assign it. Add #skybox, #stays, #fh or #braj for the brand, and today, tomorrow, a weekday or a date like 30 Nov for the due date.</p>
 
           {rows.length > 0 ? (
@@ -191,6 +204,7 @@ export function StandupsPanel() {
               {entry.summary.length > 280 ? (
                 <button type="button" className="ghost" onClick={() => setOpenId(open ? null : entry.id)}>{open ? "Show less" : "Read all"}</button>
               ) : null}
+              <Attachments parentType="standup" parentId={entry.id} canAdd={hq.isAdmin} />
               {entry.taskCount ? (
                 <ul className="su-made">
                   {hq.data.tasks
