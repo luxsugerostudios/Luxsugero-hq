@@ -5,9 +5,10 @@ import { useHqContext } from "../lib/hq";
 import { BRAND_COLOR, ORG, firstName, loadLevel, orgSeat } from "../lib/orbit";
 import { AgeBadge } from "./ui/AgeBadge";
 import { TaskDrawer } from "./ui/TaskDrawer";
-import { parseQuickAdd, parseStandup, type QuickDraft } from "../lib/quickAdd";
+import { OwnerSelect } from "./ui/OwnerSelect";
+import { QuickAssign, TaskList, sortForDesk } from "./TaskList";
 import { collapseOpenTasks, taskLane, type ShownTask } from "../lib/tasks";
-import { TaskRow } from "./ui/TaskRow";
+
 import type { BrandId, Person, Task, TaskHistory } from "../lib/types";
 import { BRAND_IDS } from "../lib/types";
 
@@ -33,60 +34,108 @@ function ownerLine(ownerId: string, people: Person[], agents: { id: string; name
   return agents.find((agent) => agent.id === ownerId)?.name ?? actorName(ownerId, people);
 }
 
+type Show = "open" | "loose" | "late" | "today" | "done";
+type View = "list" | "matrix" | "radar";
+
 export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
   const hq = useHqContext();
   const today = kolkataDay();
   const people = [...hq.data.people].sort((a, b) => a.order - b.order);
   const [brandFilter, setBrandFilter] = useState("all");
-  const [onlyLate, setOnlyLate] = useState(false);
-  const [onlyLoose, setOnlyLoose] = useState(false);
-  const [view, setView] = useState<"matrix" | "radar">("matrix");
+  const [show, setShow] = useState<Show>("open");
+  const [personFilter, setPersonFilter] = useState("all");
+  const [view, setView] = useState<View>("list");
   const [query, setQuery] = useState("");
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [assignOpen, setAssignOpen] = useState(false);
 
   const collapsed = useMemo(() => collapseOpenTasks(hq.data.tasks), [hq.data.tasks]);
+  const late = (task: Task) => isOverdue(task.status, task.givenDate, today, task.flagAfterDays, task.longTerm);
+  const open = collapsed.filter(({ task }) => task.status === "open");
+  const counts = {
+    open: open.length,
+    loose: open.filter(({ task }) => task.ownerId === "unassigned").length,
+    late: open.filter(({ task }) => late(task)).length,
+    today: open.filter(({ task }) => task.dueDate === today).length,
+    done: collapsed.filter(({ task }) => closedThisWeek(task.status, task.closedAt, today)).length,
+  };
+
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return collapsed.filter(({ task }) => {
       if (brandFilter !== "all" && task.brand !== brandFilter) return false;
-      if (onlyLate && !isOverdue(task.status, task.givenDate, today, task.flagAfterDays, task.longTerm)) return false;
-      if (onlyLoose && task.ownerId !== "unassigned") return false;
-      if (!needle) return true;
-      return `${task.title} ${task.note}`.toLowerCase().includes(needle);
+      if (personFilter !== "all" && task.ownerId !== personFilter) return false;
+      if (needle && !`${task.title} ${task.note}`.toLowerCase().includes(needle)) return false;
+      return true;
     });
-  }, [brandFilter, collapsed, onlyLate, onlyLoose, query, today]);
+  }, [brandFilter, collapsed, personFilter, query]);
 
-  const mine =
-    hq.personId && hq.personId !== "founder" && hq.personId !== "admin"
-      ? visible.filter((item) => item.task.ownerId === hq.personId)
-      : [];
+  const listed = sortForDesk(
+    visible
+      .map(({ task }) => task)
+      .filter((task) => {
+        if (show === "done") return closedThisWeek(task.status, task.closedAt, today);
+        if (task.status !== "open") return false;
+        if (show === "loose") return task.ownerId === "unassigned";
+        if (show === "late") return late(task);
+        if (show === "today") return task.dueDate === today;
+        return true;
+      }),
+    today,
+  );
+
+  const linked = Boolean(hq.personId && hq.personId !== "founder" && hq.personId !== "admin");
 
   if (mode === "mine") {
-    const linked = hq.personId && hq.personId !== "founder" && hq.personId !== "admin";
+    const myOpen = collapsed.filter(({ task }) => task.ownerId === hq.personId && task.status === "open").map(({ task }) => task);
+    const mine = sortForDesk(
+      show === "done"
+        ? collapsed.map(({ task }) => task).filter((task) => task.ownerId === hq.personId && closedThisWeek(task.status, task.closedAt, today))
+        : myOpen,
+      today,
+    );
+    const seat = hq.personId ? orgSeat(hq.personId) : undefined;
     return (
       <section aria-labelledby="mine-heading">
         <div className="section-head">
           <h2 id="mine-heading">My tasks</h2>
+          {linked ? (
+            <p className="meta">
+              {seat ? `${firstName(seat.name)} · ${seat.title} · ` : ""}
+              {myOpen.filter(late).length} late · {myOpen.filter((task) => task.dueDate === today).length} due today · {myOpen.length} open
+            </p>
+          ) : null}
         </div>
         {hq.access === "signed-out" || hq.access === "pending" ? (
           <div className="stack">
             <p className="empty">Sign in to see your day.</p>
             <button type="button" className="primary" onClick={() => void hq.signIn()}>Sign in with Google</button>
-            <p className="meta">Today at HQ: {hq.data.tasks.filter((task) => task.status === "open").length} open, {hq.data.tasks.filter((task) => isOverdue(task.status, task.givenDate, today, task.flagAfterDays, task.longTerm)).length} late, {hq.data.tasks.filter((task) => task.status === "open" && task.dueDate === today).length} due today.</p>
           </div>
         ) : null}
-        {hq.access === "guest" ? (
-          <p className="empty">Ask the founder to add your email.</p>
+        {hq.access === "guest" ? <p className="empty">Ask the founder to add your email.</p> : null}
+        {hq.isAdmin ? <QuickAssign today={today} /> : null}
+        {hq.isAdmin && !linked ? <p className="empty">This account has no tasks of its own. Use the Team board to see and assign everyone's work.</p> : null}
+        {linked ? (
+          <>
+            <div className="toolbar filters">
+              <label>
+                Show
+                <select value={show === "done" ? "done" : "open"} onChange={(event) => setShow(event.target.value as Show)}>
+                  <option value="open">Open</option>
+                  <option value="done">Done this week</option>
+                </select>
+              </label>
+            </div>
+            <TaskList
+              tasks={mine}
+              today={today}
+              onOpen={setDrawer}
+              empty={show === "done" ? "Nothing closed this week yet." : "Nothing assigned to you right now."}
+            />
+          </>
         ) : null}
-        {hq.isAdmin && !linked ? (
-          <p className="empty">This account is not linked to a person. Assign work from the team board.</p>
-        ) : null}
-        {linked || hq.isAdmin ? <QuickAdd /> : null}
-        {hq.isAdmin ? <StandupImport /> : null}
-        {linked ? <MyTasks tasks={mine} today={today} people={people} history={hq.data.history} /> : null}
+        {drawer ? <TaskDrawer taskId={drawer} onClose={() => setDrawer(null)} /> : null}
       </section>
     );
   }
@@ -95,26 +144,66 @@ export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
     <section aria-labelledby="tasks-heading">
       <div className="section-head">
         <h2 id="tasks-heading">Team board</h2>
+        <p className="meta">{counts.open} open · {counts.late} late · {counts.today} due today</p>
       </div>
       {hq.access === "guest" && hq.phase === "live" ? (
-        <p className="banner" role="status">
-          Ask the founder to add your email.
+        <p className="banner" role="status">Ask the founder to add your email.</p>
+      ) : null}
+      {hq.isAdmin ? <QuickAssign today={today} /> : null}
+      {hq.isAdmin && counts.loose > 0 && show !== "loose" ? (
+        <p className="desk-alert" role="status">
+          <b>{counts.loose}</b> {counts.loose === 1 ? "task has" : "tasks have"} no owner.
+          <button type="button" className="ghost" onClick={() => { setShow("loose"); setView("list"); }}>Show them</button>
         </p>
       ) : null}
       <div className="toolbar filters">
         <label>
           Search
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Title or note" aria-label="Search tasks" />
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Title or note" aria-label="Search tasks" />
         </label>
-        {BRAND_IDS.map((id) => (
-          <FilterChip key={id} pressed={brandFilter === id} onClick={() => setBrandFilter(brandFilter === id ? "all" : id)}>{id}</FilterChip>
-        ))}
-        <FilterChip pressed={onlyLate} onClick={() => setOnlyLate((value) => !value)}>Only late</FilterChip>
-        <FilterChip pressed={onlyLoose} onClick={() => setOnlyLoose((value) => !value)}>Only no owner</FilterChip>
-        <FilterChip pressed={view === "matrix"} onClick={() => setView("matrix")}>Matrix</FilterChip>
-        <FilterChip pressed={view === "radar"} onClick={() => setView("radar")}>Due radar</FilterChip>
-        {hq.isAdmin ? <button type="button" className="primary" onClick={() => setAssignOpen(true)}>Assign task</button> : <span className="meta">Only an admin can assign.</span>}
+        <label>
+          Show
+          <select value={show} onChange={(event) => setShow(event.target.value as Show)}>
+            <option value="open">All open ({counts.open})</option>
+            <option value="loose">No owner ({counts.loose})</option>
+            <option value="late">Late ({counts.late})</option>
+            <option value="today">Due today ({counts.today})</option>
+            <option value="done">Done this week ({counts.done})</option>
+          </select>
+        </label>
+        <label>
+          Person
+          <select value={personFilter} onChange={(event) => setPersonFilter(event.target.value)}>
+            <option value="all">Everyone</option>
+            {people.filter((person) => person.id !== "unassigned").map((person) => (
+              <option key={person.id} value={person.id}>{orgSeat(person.id)?.name ?? person.name}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Brand
+          <select value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)}>
+            <option value="all">All brands</option>
+            {BRAND_IDS.map((id) => <option key={id} value={id}>{id}</option>)}
+          </select>
+        </label>
+        <label>
+          View
+          <select value={view} onChange={(event) => setView(event.target.value as View)}>
+            <option value="list">List</option>
+            <option value="matrix">By person</option>
+            <option value="radar">By due date</option>
+          </select>
+        </label>
       </div>
+      {view === "list" ? (
+        <TaskList
+          tasks={listed}
+          today={today}
+          onOpen={setDrawer}
+          empty={show === "loose" ? "Every task has an owner." : "No tasks match these filters."}
+        />
+      ) : null}
       {view === "matrix" ? (
         <Matrix tasks={visible} people={people} today={today} dragOver={dragOver} setDragOver={setDragOver} expanded={expanded} setExpanded={setExpanded} onOpen={setDrawer} canDrag={hq.isAdmin} onMove={(task, column, ownerId) => {
           const next = async () => {
@@ -124,13 +213,13 @@ export function TasksPanel({ mode = "board" }: { mode?: "mine" | "board" }) {
           };
           void next().then(() => { if (column === "done") burst(window.innerWidth / 2, 80); }).catch(() => undefined);
         }} />
-      ) : (
+      ) : null}
+      {view === "radar" ? (
         <DueRadar tasks={visible} today={today} dragOver={dragOver} setDragOver={setDragOver} onOpen={setDrawer} canDrag={hq.isAdmin} onDue={(task, dueDate, summary) => {
           void hq.saveTask({ ...task, dueDate, updatedAt: new Date().toISOString() }, summary).catch(() => undefined);
         }} />
-      )}
+      ) : null}
       {drawer ? <TaskDrawer taskId={drawer} onClose={() => setDrawer(null)} /> : null}
-      {assignOpen ? <AssignModal onClose={() => setAssignOpen(false)} /> : null}
     </section>
   );
 }
@@ -331,145 +420,6 @@ function DueRadar({
   );
 }
 
-function MyTasks({
-  tasks,
-  today,
-}: {
-  tasks: ShownTask[];
-  today: string;
-  people: Person[];
-  history: Record<string, TaskHistory[]>;
-}) {
-  const [drawer, setDrawer] = useState<string | null>(null);
-  const [showDone, setShowDone] = useState(false);
-  const ownerId = tasks[0]?.task.ownerId ?? "";
-  const seat = orgSeat(ownerId);
-  const late = tasks.filter(({ task }) => isOverdue(task.status, task.givenDate, today, task.flagAfterDays, task.longTerm));
-  const dueToday = tasks.filter(({ task }) => task.status === "open" && task.dueDate === today && !late.some((item) => item.task.id === task.id));
-  const upcoming = tasks.filter(({ task }) => task.status === "open" && task.dueDate && task.dueDate > today && !late.some((item) => item.task.id === task.id));
-  const undated = tasks.filter(({ task }) => task.status === "open" && !task.dueDate && !late.some((item) => item.task.id === task.id));
-  const done = tasks.filter(({ task }) => closedThisWeek(task.status, task.closedAt, today));
-  const groups = [["Late", late], ["Today", dueToday], ["Up next", upcoming], ["No date", undated]] as const;
-  return (
-    <section className="my-tasks">
-      <p className="meta">{seat ? `${firstName(seat.name)} · ${seat.title}` : "My day"} · {late.length} late · {dueToday.length} today</p>
-      {tasks.length === 0 ? <p className="empty">Nothing assigned to you. Ask an admin to assign one.</p> : null}
-      {groups.map(([label, rows]) => (
-        <div key={label} className="stack">
-          <h3>{label}</h3>
-          {rows.length === 0 ? <p className="empty">None</p> : null}
-          {rows.map(({ task }) => <TaskRow key={task.id} task={task} onOpen={() => setDrawer(task.id)} />)}
-        </div>
-      ))}
-      <button type="button" className="ghost" onClick={() => setShowDone((value) => !value)}>Done this week ({done.length})</button>
-      {showDone ? done.map(({ task }) => <TaskRow key={task.id} task={task} onOpen={() => setDrawer(task.id)} />) : null}
-      {drawer ? <TaskDrawer taskId={drawer} onClose={() => setDrawer(null)} /> : null}
-    </section>
-  );
-}
-
-function QuickAdd() {
-  const hq = useHqContext();
-  const today = kolkataDay();
-  const [text, setText] = useState("");
-  const people = hq.data.people.map((person) => ({ id: person.id, name: orgSeat(person.id)?.name ?? person.name }));
-  const draft = parseQuickAdd(text, today, people);
-  const ownerId = draft.ownerId ?? "unassigned";
-  if (!hq.isAdmin) return null;
-  return (
-    <form
-      className="stack"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!draft.title || !ownerId) return;
-        const now = new Date().toISOString();
-        void hq.saveTask({
-          id: crypto.randomUUID(),
-          title: draft.title,
-          ownerId,
-          givenDate: today,
-          dueDate: draft.dueDate,
-          status: "open",
-          lane: "todo",
-          closedAt: null,
-          longTerm: draft.longTerm,
-          flagAfterDays: draft.longTerm ? 7 : null,
-          note: "",
-          brand: draft.brand,
-          inboxId: null,
-          createdAt: now,
-          updatedAt: now,
-        }, "Added from quick add").then(() => setText("")).catch(() => undefined);
-      }}
-    >
-      <label>
-        Quick add
-        <input value={text} onChange={(event) => setText(event.target.value)} placeholder="@debo layout #skybox tomorrow long" />
-      </label>
-      {text ? <p className="meta">{draft.title || "No title"} · {ownerId ?? "no owner"} · {draft.brand ?? "no brand"} · {draft.dueDate ?? "no date"}{draft.longTerm ? " · long-term" : ""}</p> : null}
-      <button type="submit" className="primary" disabled={!draft.title}>Add task</button>
-    </form>
-  );
-}
-
-function StandupImport() {
-  const hq = useHqContext();
-  const today = kolkataDay();
-  const [open, setOpen] = useState(false);
-  const [notes, setNotes] = useState("");
-  const [rows, setRows] = useState<QuickDraft[]>([]);
-  const people = hq.data.people.map((person) => ({ id: person.id, name: orgSeat(person.id)?.name ?? person.name }));
-  if (!hq.isAdmin) return null;
-  return (
-    <div>
-      <button type="button" className="ghost" onClick={() => setOpen(true)}>Paste standup notes</button>
-      {open ? (
-        <div className="drawer-back" onClick={() => setOpen(false)}>
-          <aside className="drawer" onClick={(event) => event.stopPropagation()}>
-            <button type="button" className="ghost" onClick={() => setOpen(false)}>Close</button>
-            <h3>Paste standup notes</h3>
-            <textarea value={notes} rows={6} onChange={(event) => setNotes(event.target.value)} />
-            <button type="button" className="ghost" onClick={() => setRows(parseStandup(notes, today, people))}>Review</button>
-            {rows.map((row, index) => (
-              <div key={`${row.title}-${index}`} className="row">
-                <input value={row.title} onChange={(event) => setRows((current) => current.map((item, i) => i === index ? { ...item, title: event.target.value } : item))} />
-                <button type="button" className="ghost" onClick={() => setRows((current) => current.filter((_, i) => i !== index))}>Remove</button>
-              </div>
-            ))}
-            <button
-              type="button"
-              className="primary"
-              disabled={rows.length === 0}
-              onClick={() => {
-                const now = new Date().toISOString();
-                void Promise.all(rows.filter((row) => row.title).map((row) => hq.saveTask({
-                  id: crypto.randomUUID(),
-                  title: row.title,
-                  ownerId: row.ownerId ?? "unassigned",
-                  givenDate: today,
-                  dueDate: row.dueDate,
-                  status: "open",
-                  lane: "todo",
-                  closedAt: null,
-                  longTerm: row.longTerm,
-                  flagAfterDays: row.longTerm ? 7 : null,
-                  note: `standup ${today}`,
-                  brand: row.brand,
-                  inboxId: null,
-                  createdAt: now,
-                  updatedAt: now,
-                }, `standup ${today}`))).then(() => { setRows([]); setNotes(""); setOpen(false); }).catch(() => undefined);
-              }}
-            >
-              Create {rows.length} tasks
-            </button>
-          </aside>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 export function AssignModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="modal-back" role="presentation" onClick={onClose}>
@@ -527,7 +477,7 @@ function AssignForm({ onDone }: { onDone?: () => void }) {
       </label>
       <div className="wide">
         <p className="meta">Owner</p>
-        <OwnerPicker value={ownerId} onChange={setOwnerId} />
+        <OwnerSelect value={ownerId} onChange={setOwnerId} />
       </div>
       <label>
         Due
@@ -552,39 +502,6 @@ function AssignForm({ onDone }: { onDone?: () => void }) {
     </form>
   );
 }
-
-function OwnerPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
-  const { data } = useHqContext();
-  const groups = [
-    {
-      label: "People",
-      options: data.people
-        .filter((person) => person.id !== "unassigned")
-        .map((person) => ({ id: person.id, label: orgSeat(person.id)?.name ?? person.name })),
-    },
-    {
-      label: "Brand PMs",
-      options: data.agents.filter((agent) => agent.group === "Brand PM").map((agent) => ({ id: agent.id, label: agent.name })),
-    },
-    {
-      label: "Agents",
-      options: data.agents.filter((agent) => agent.group !== "Brand PM").map((agent) => ({ id: agent.id, label: agent.name })),
-    },
-  ];
-  return (
-    <select aria-label="Owner" value={value} onChange={(event) => onChange(event.target.value)}>
-      {value ? null : <option value="">Pick an owner</option>}
-      {groups.map((group) => (
-        <optgroup key={group.label} label={group.label}>
-          {group.options.map((option) => (
-            <option key={option.id} value={option.id}>{option.label}</option>
-          ))}
-        </optgroup>
-      ))}
-    </select>
-  );
-}
-
 
 export function TaskCard({
   task,
@@ -693,7 +610,7 @@ export function TaskCard({
         </p>
         {task.note ? <p className="focus">{task.note}</p> : null}
         {picking && isAdmin ? (
-          <OwnerPicker
+          <OwnerSelect
             value={task.ownerId}
             onChange={(ownerId) => {
               setPicking(false);
@@ -800,21 +717,5 @@ function LongTermField({
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
       Long-term (flag after 7 days)
     </label>
-  );
-}
-
-function FilterChip({
-  pressed,
-  onClick,
-  children,
-}: {
-  pressed: boolean;
-  onClick: () => void;
-  children: string;
-}) {
-  return (
-    <button type="button" className="chip" aria-pressed={pressed} onClick={onClick}>
-      {children}
-    </button>
   );
 }

@@ -144,6 +144,17 @@ export type PrivateLead = {
   phone: string;
 };
 
+/** A daily standup summary logged by an admin (founder, Hari Om, Shrishti). */
+export type Standup = {
+  id: string;
+  date: string;
+  authorId: string;
+  summary: string;
+  taskCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Directive = {
   id: string;
   agentId: string;
@@ -178,6 +189,7 @@ export type DashboardData = {
   inbox: InboxItem[];
   history: Record<string, TaskHistory[]>;
   pipelines: PipelineBoard[];
+  standups: Standup[];
 };
 
 export const EMPTY_DASHBOARD: DashboardData = {
@@ -191,4 +203,5 @@ export const EMPTY_DASHBOARD: DashboardData = {
   inbox: [],
   history: {},
   pipelines: [],
+  standups: [],
 };

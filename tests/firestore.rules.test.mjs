@@ -88,7 +88,7 @@ beforeEach(async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     await setDoc(doc(db, "config/roles"), {
-      admins: [FOUNDER, HARI],
+      admins: [FOUNDER, HARI, SHRISHTI],
       members: {
         [HARI]: "hari-om",
         [DEBO]: "debo",
@@ -362,4 +362,37 @@ test("history stays public and immutable", async () => {
   const db = env.unauthenticatedContext().firestore();
   await assertSucceeds(getDoc(doc(db, "tasks/t-debo/history/h1")));
   await assertFails(updateDoc(doc(db, "tasks/t-debo/history/h1"), { summary: "Changed" }));
+});
+
+function standup(id, extra = {}) {
+  return {
+    id,
+    date: "2026-11-26",
+    authorId: "shrishti",
+    summary: "Ads went live. Woodman costing pending.",
+    taskCount: 2,
+    createdAt: STAMP,
+    updatedAt: STAMP,
+    ...extra,
+  };
+}
+
+test("admins log standups; members read them; the public cannot", async () => {
+  await assertSucceeds(setDoc(doc(authed(SHRISHTI).firestore(), "standups/s1"), standup("s1")));
+  await assertSucceeds(setDoc(doc(authed(HARI).firestore(), "standups/s2"), standup("s2", { authorId: "hari-om" })));
+  await assertSucceeds(setDoc(doc(authed(FOUNDER).firestore(), "standups/s3"), standup("s3", { authorId: "founder" })));
+  await assertSucceeds(setDoc(doc(authed(SHRISHTI).firestore(), "tasks/t-from-standup"), task("t-from-standup", "gaurav")));
+  await assertSucceeds(getDoc(doc(authed(DEBO).firestore(), "standups/s1")));
+  await assertFails(setDoc(doc(authed(DEBO).firestore(), "standups/s4"), standup("s4", { authorId: "debo" })));
+  await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), "standups/s1")));
+  await assertFails(getDoc(doc(authed(GUEST).firestore(), "standups/s1")));
+});
+
+test("standup documents are shape-checked", async () => {
+  const db = authed(SHRISHTI).firestore();
+  await assertFails(setDoc(doc(db, "standups/s5"), standup("other-id")));
+  await assertFails(setDoc(doc(db, "standups/s6"), standup("s6", { date: "26 Nov" })));
+  await assertFails(setDoc(doc(db, "standups/s7"), standup("s7", { summary: "" })));
+  await assertFails(setDoc(doc(db, "standups/s8"), standup("s8", { email: "x@y.z" })));
+  await assertFails(setDoc(doc(db, "standups/s9"), standup("s9", { taskCount: 500 })));
 });

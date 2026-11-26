@@ -40,6 +40,7 @@ import {
   mapLead,
   mapPerson,
   mapPrivateLead,
+  mapStandup,
   mapTask,
 } from "./map";
 import { mapPipeline } from "./pipeline";
@@ -52,6 +53,7 @@ import type {
   Lead,
   PrivateLead,
   RolesDoc,
+  Standup,
   Task,
 } from "./types";
 import { EMPTY_DASHBOARD } from "./types";
@@ -99,6 +101,7 @@ export type HqValue = {
   saveLead: (lead: Lead, privateLead: PrivateLead | null) => Promise<void>;
   deleteLead: (code: string) => Promise<void>;
   saveDirective: (directive: Directive) => Promise<void>;
+  saveStandup: (standup: Standup) => Promise<void>;
 };
 
 const HqContext = createContext<HqValue | null>(null);
@@ -332,6 +335,19 @@ export function HqProvider({ children }: { children: ReactNode }) {
       unsubHistory();
     };
   }, [services, phase]);
+
+  // Standup log: team can read, admins write. Empty until the rule is published.
+  useEffect(() => {
+    if (!services || phase !== "live" || (!isAdmin && !isMember)) return;
+    return onSnapshot(
+      collection(services.db, "standups"),
+      (snap) => {
+        const standups = mapped(snap.docs, mapStandup).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+        setData((prev) => ({ ...prev, standups }));
+      },
+      () => setData((prev) => ({ ...prev, standups: [] })),
+    );
+  }, [services, phase, isAdmin, isMember]);
 
   useEffect(() => {
     if (!services || phase !== "live" || (!isAdmin && !isMember)) return;
@@ -811,6 +827,28 @@ export function HqProvider({ children }: { children: ReactNode }) {
             setActionError(readable(error));
             throw error;
           });
+      },
+      async saveStandup(standup) {
+        if (!services || !isAdmin) {
+          const message = "Only an admin can log a standup.";
+          setActionError(message);
+          throw new Error(message);
+        }
+        await setDoc(doc(services.db, "standups", standup.id), {
+          id: standup.id,
+          date: standup.date,
+          authorId: standup.authorId,
+          summary: standup.summary,
+          taskCount: standup.taskCount,
+          createdAt: standup.createdAt,
+          updatedAt: standup.updatedAt,
+        }).catch((error: unknown) => {
+          const message = codeOf(error).includes("permission")
+            ? "Standups are not switched on yet. Publish the latest firestore.rules in the Firebase console."
+            : readable(error);
+          setActionError(message);
+          throw error;
+        });
       },
     };
   }, [

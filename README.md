@@ -91,7 +91,7 @@ Do this in the Firebase console (**Firestore → config → roles**) or by editi
 | `PASTE_MEGHA_GMAIL` | `megha` |
 | `PASTE_GAURAV_GMAIL` | `gaurav` |
 
-Hari Om's email has to be in **both** `admins` and `members` (value `hari-om`). An empty member value does not grant access. Publish `firestore.rules` before expecting the new permissions to apply.
+Admins (Hari Om and Shrishti) need their email in **both** `admins` and `members` (values `hari-om`, `shrishti`). Admins can assign, edit and delete tasks and log daily standups. An empty member value does not grant access. Publish `firestore.rules` before expecting the new permissions to apply.
 
 ## Public view and Kraya
 

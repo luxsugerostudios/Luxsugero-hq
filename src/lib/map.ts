@@ -15,6 +15,7 @@ import {
   type DashboardData,
   type Directive,
   type DirectiveStatus,
+  type Standup,
   type Headline,
   type InboxItem,
   type InboxStatus,
@@ -191,6 +192,23 @@ export function mapPrivateLead(id: string, raw: unknown): PrivateLead | null {
   };
 }
 
+export function mapStandup(id: string, raw: unknown): Standup | null {
+  if (!isRecord(raw)) return null;
+  const date = dateOnly(raw.date);
+  const summary = text(raw.summary);
+  const createdAt = stamp(raw.createdAt);
+  if (!id || !date || !summary || !createdAt) return null;
+  return {
+    id,
+    date,
+    authorId: text(raw.authorId),
+    summary,
+    taskCount: Math.max(0, Math.round(asNumber(raw.taskCount))),
+    createdAt,
+    updatedAt: stamp(raw.updatedAt) || createdAt,
+  };
+}
+
 export function mapDirective(id: string, raw: unknown): Directive | null {
   if (!isRecord(raw)) return null;
   const textBody = text(raw.text);
@@ -241,6 +259,7 @@ export function readDashboard(raw: unknown): DashboardData {
     inbox: [],
     history: {},
     pipelines: [],
+    standups: [],
   };
 }
 
