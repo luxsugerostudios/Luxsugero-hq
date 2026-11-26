@@ -319,6 +319,8 @@ export function HqProvider({ children }: { children: ReactNode }) {
           if (!event) continue;
           history[taskId] = [...(history[taskId] ?? []), event];
         }
+        // Firestore returns events by random doc id; show them oldest first.
+        for (const events of Object.values(history)) events.sort((a, b) => a.at.localeCompare(b.at));
         setData((prev) => ({ ...prev, history }));
       },
       () => {

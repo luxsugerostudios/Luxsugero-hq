@@ -572,26 +572,16 @@ function OwnerPicker({ value, onChange }: { value: string; onChange: (id: string
     },
   ];
   return (
-    <div className="tag-groups">
+    <select aria-label="Owner" value={value} onChange={(event) => onChange(event.target.value)}>
+      {value ? null : <option value="">Pick an owner</option>}
       {groups.map((group) => (
-        <fieldset key={group.label}>
-          <legend>{group.label}</legend>
-          <div className="tag-grid">
-            {group.options.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className="chip"
-                aria-pressed={value === option.id}
-                onClick={() => onChange(option.id)}
-              >
-                {option.label.slice(0, 1)} {option.label}
-              </button>
-            ))}
-          </div>
-        </fieldset>
+        <optgroup key={group.label} label={group.label}>
+          {group.options.map((option) => (
+            <option key={option.id} value={option.id}>{option.label}</option>
+          ))}
+        </optgroup>
       ))}
-    </div>
+    </select>
   );
 }
 

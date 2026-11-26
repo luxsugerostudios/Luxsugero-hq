@@ -89,6 +89,7 @@ Do this in the Firebase console (**Firestore → config → roles**) or by editi
 | `PASTE_SIDDHANT_GMAIL` | `siddhant` |
 | `PASTE_INTIKHAB_GMAIL` | `intikhab` |
 | `PASTE_MEGHA_GMAIL` | `megha` |
+| `PASTE_GAURAV_GMAIL` | `gaurav` |
 
 Hari Om's email has to be in **both** `admins` and `members` (value `hari-om`). An empty member value does not grant access. Publish `firestore.rules` before expecting the new permissions to apply.
 

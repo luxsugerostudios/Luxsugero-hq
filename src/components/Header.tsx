@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useHqContext } from "../lib/hq";
 
 export function Header({
@@ -15,7 +14,6 @@ export function Header({
   onSearch?: () => void;
 }) {
   const { configured, user, access, signIn, signOutUser } = useHqContext();
-  const [copied, setCopied] = useState(false);
   const role =
     access === "admin" ? "Admin" : access === "member" ? "Member" : access === "guest" ? "Not on the roster" : "Public";
 
@@ -23,39 +21,14 @@ export function Header({
     <div className="toolbar">
       <span className="role">{role}</span>
       {onSearch ? <button type="button" className="ghost" onClick={onSearch}>Search</button> : null}
-      <button
-        type="button"
-        className="ghost"
-        onClick={() => {
-          const next = document.documentElement.dataset.density === "compact" ? "comfortable" : "compact";
-          document.documentElement.dataset.density = next;
-          try { localStorage.setItem("hq-density", next); } catch { /* ignore */ }
-        }}
-      >
-        {document.documentElement.dataset.density === "compact" ? "Comfortable" : "Compact"}
-      </button>
       {showAssign && onAssign ? (
         <button type="button" className="primary assign-top" onClick={onAssign}>
           + Assign task
         </button>
       ) : null}
       {user?.email ? <span className="who">{user.email}</span> : null}
-      <button
-        type="button"
-        className="ghost"
-        onClick={() => {
-          const url = new URL(window.location.href);
-          url.hash = "#/public";
-          void navigator.clipboard.writeText(url.toString()).then(
-            () => {
-              setCopied(true);
-              window.setTimeout(() => setCopied(false), 1200);
-            },
-            () => undefined,
-          );
-        }}
-      >
-        {copied ? "Copied" : "Public view"}
+      <button type="button" className="ghost" onClick={() => { window.location.hash = "public"; }}>
+        Public view
       </button>
       <button type="button" className="ghost" onClick={onToggleTheme}>
         {theme === "dark" ? "Light" : "Dark"}

@@ -8,7 +8,8 @@
     { "id": "mayank", "name": "Mayank", "role": "", "order": 6 },
     { "id": "megha", "name": "Megha", "role": "", "order": 7 },
     { "id": "everyone", "name": "Everyone", "role": "Shared", "order": 8 },
-    { "id": "unassigned", "name": "Unassigned", "role": "Inbox", "order": 9 }
+    { "id": "unassigned", "name": "Unassigned", "role": "Inbox", "order": 9 },
+    { "id": "gaurav", "name": "Gaurav", "role": "Luxskybox sales lead, international clients", "order": 10 }
   ],
   "tasks": [
     {
