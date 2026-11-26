@@ -102,6 +102,7 @@ export type HqValue = {
   deleteLead: (code: string) => Promise<void>;
   saveDirective: (directive: Directive) => Promise<void>;
   saveStandup: (standup: Standup) => Promise<void>;
+  deleteStandup: (id: string) => Promise<void>;
 };
 
 const HqContext = createContext<HqValue | null>(null);
@@ -827,6 +828,17 @@ export function HqProvider({ children }: { children: ReactNode }) {
             setActionError(readable(error));
             throw error;
           });
+      },
+      async deleteStandup(id) {
+        if (!services || !isAdmin) {
+          const message = "Only an admin can delete a standup.";
+          setActionError(message);
+          throw new Error(message);
+        }
+        await deleteDoc(doc(services.db, "standups", id)).catch((error: unknown) => {
+          setActionError(readable(error));
+          throw error;
+        });
       },
       async saveStandup(standup) {
         if (!services || !isAdmin) {
