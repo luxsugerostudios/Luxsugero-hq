@@ -891,7 +891,8 @@ input, select, textarea { min-height: var(--control); }
 
 /* corners */
 .cp-corner { position: absolute; z-index: 4; display: flex; gap: 8px; align-items: flex-start; }
-.cp-corner.tl { top: max(16px, env(safe-area-inset-top, 0px)); left: 16px; flex-wrap: wrap; max-width: calc(100% - 200px); }
+.cp-corner.tl { top: max(16px, env(safe-area-inset-top, 0px)); left: 16px; flex-wrap: nowrap; align-items: center; max-width: calc(100% - 200px); }
+.cp-dock.is-open { z-index: 10; }
 .cp-corner.tr { top: max(16px, env(safe-area-inset-top, 0px)); right: 16px; }
 .cp-corner.bl { bottom: 16px; left: 16px; align-items: flex-end; }
 .cp-corner.br { bottom: 16px; right: 16px; align-items: flex-end; flex-wrap: wrap; justify-content: flex-end; }
@@ -1126,10 +1127,10 @@ input, select, textarea { min-height: var(--control); }
 .desk-alert b { font-size: 18px; }
 .desk-alert .ghost { margin-left: auto; }
 
-.tl { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.tlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .tl-head, .tl-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 190px 120px 150px;
+  grid-template-columns: 28px minmax(0, 1fr) 190px 120px 150px 150px;
   gap: 8px;
   align-items: center;
 }
@@ -1205,4 +1206,28 @@ input, select, textarea { min-height: var(--control); }
 @media (max-width: 640px) {
   .bal-list li { grid-template-columns: 24px minmax(0, 1fr); }
   .bal-list li select { grid-column: 2; }
+}
+
+/* Row edits wait for Save; the row says so. */
+.tl-actions { display: flex; gap: 6px; justify-content: flex-end; min-width: 0; }
+.tl-actions button { min-height: 32px; padding: 4px 12px; font-size: 13px; }
+.tl-row.is-dirty { background: color-mix(in srgb, var(--surface) 80%, var(--lime)); outline: 2px solid var(--lime); outline-offset: -2px; }
+.tl-row.is-flash { animation: tl-flash 2.2s ease; }
+@keyframes tl-flash {
+  0%, 30% { background: var(--lime); color: var(--on-lime); }
+  100% { background: var(--surface); }
+}
+.tl-toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  max-width: min(720px, calc(100vw - 32px));
+  background: var(--ink); color: var(--surface); border-radius: 16px; padding: 10px 12px 10px 16px;
+  box-shadow: 0 12px 32px rgba(10, 10, 18, 0.35); font-size: 14px;
+}
+.tl-toast span { flex: 1 1 260px; }
+.tl-toast .ghost { background: color-mix(in srgb, var(--surface) 18%, transparent); color: var(--surface); min-height: 32px; padding: 4px 12px; }
+@media (max-width: 860px) {
+  .tl-actions { grid-column: 1 / -1; justify-content: stretch; }
+  .tl-actions:empty { display: none; }
+  .tl-actions button { flex: 1; }
 }
