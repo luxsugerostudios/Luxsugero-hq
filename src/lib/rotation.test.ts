@@ -23,7 +23,7 @@ function task(partial: Partial<Task> & Pick<Task, "id" | "ownerId" | "status" | 
 
 test("the org chart matches the founder line", () => {
   const byId = Object.fromEntries(ORG.map((seat) => [seat.id, seat]));
-  assert.equal(byId.abhay.title, "Director");
+  assert.equal(byId.abhay.title, "Director & Founder");
   assert.equal(byId.abhay.reportsTo, null);
   assert.equal(byId["hari-om"].reportsTo, "abhay");
   assert.equal(byId.shrishti.reportsTo, "hari-om");
@@ -31,7 +31,7 @@ test("the org chart matches the founder line", () => {
   assert.equal(byId.intikhab.reportsTo, "hari-om");
   assert.equal(byId.megha.reportsTo, "hari-om");
   assert.equal(byId.mayank.reportsTo, "shrishti");
-  assert.equal(byId.siddhant.reportsTo, "debo");
+  assert.equal(byId.siddhant.reportsTo, "hari-om");
   assert.deepEqual(rotationInterns().map((seat) => seat.id), ["mayank", "siddhant"]);
 });
 

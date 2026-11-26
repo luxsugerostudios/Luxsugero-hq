@@ -58,15 +58,15 @@ export type OrgSeat = {
 };
 
 export const ORG: OrgSeat[] = [
-  { id: "abhay", name: "Abhay Bhati", title: "Director", reportsTo: null },
-  { id: "hari-om", name: "Hari Om Mishra", title: "Manager", reportsTo: "abhay" },
-  { id: "shrishti", name: "Shrishti", title: "Department Head", reportsTo: "hari-om" },
+  { id: "abhay", name: "Abhay Bhati", title: "Director & Founder", reportsTo: null },
+  { id: "hari-om", name: "Hari Om Mishra", title: "Operations & Automation Head · Project Head", reportsTo: "abhay" },
+  { id: "shrishti", name: "Shrishti", title: "Marketing Head", reportsTo: "hari-om" },
   { id: "debo", name: "Debo", title: "Content Head", reportsTo: "hari-om" },
-  { id: "intikhab", name: "Intikhab", title: "Architect + Skybox Sales", reportsTo: "hari-om" },
+  { id: "intikhab", name: "Intikhab", title: "Skybox Layouts, Sourcing & Invoicing", reportsTo: "hari-om" },
   { id: "megha", name: "Megha", title: "F&H Sales", reportsTo: "hari-om" },
-  { id: "gaurav", name: "Gaurav Choudhary", title: "Skybox Sales Lead (International)", reportsTo: "hari-om" },
-  { id: "mayank", name: "Mayank", title: "Intern", reportsTo: "shrishti" },
-  { id: "siddhant", name: "Siddhant", title: "Intern", reportsTo: "debo" },
+  { id: "gaurav", name: "Gaurav Choudhary", title: "International Logistics Head · F&H Sales", reportsTo: "hari-om" },
+  { id: "mayank", name: "Mayank", title: "Marketing Intern", reportsTo: "shrishti" },
+  { id: "siddhant", name: "Siddhant", title: "Sales Trainee (Skybox)", reportsTo: "hari-om" },
 ];
 
 export function orgSeat(id: string): OrgSeat | undefined {

@@ -8,6 +8,7 @@ import { PipelinePanel } from "./components/PipelinePanel";
 import { AssignModal, TasksPanel } from "./components/TasksPanel";
 import { visibleTasks } from "./lib/tasks";
 import { PublicView } from "./components/PublicView";
+import { StandupsPanel } from "./components/StandupsPanel";
 import { HqProvider, useHqContext } from "./lib/hq";
 
 void import("./lib/orbitScene");
@@ -22,6 +23,7 @@ const NAV = [
   { id: "mine", label: "My tasks" },
   { id: "board", label: "Team board" },
   { id: "inbox", label: "Main bucket" },
+  { id: "standups", label: "Standups" },
   { id: "pipeline", label: "Pipeline" },
   { id: "insights", label: "Insights" },
   { id: "agents", label: "Agents" },
@@ -124,6 +126,7 @@ function Shell() {
           {!loading && nav === "mine" ? <TasksPanel mode="mine" /> : null}
           {!loading && nav === "board" ? <TasksPanel mode="board" /> : null}
           {!loading && nav === "inbox" ? <InboxPanel /> : null}
+          {!loading && nav === "standups" ? <StandupsPanel /> : null}
           {!loading && nav === "pipeline" ? <PipelinePanel /> : null}
           {!loading && nav === "insights" ? <InsightsPanel /> : null}
           {!loading && nav === "agents" ? <AgentsPanel /> : null}

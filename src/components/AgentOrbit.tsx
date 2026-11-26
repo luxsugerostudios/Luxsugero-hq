@@ -1,3 +1,4 @@
+import { planSmartBalance, TEAM } from "../lib/team";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatStamp, kolkataDay } from "../lib/dates";
 import { buildInsights } from "../lib/insights";
@@ -14,7 +15,6 @@ import {
   firstName,
   loadLevel,
   orgSeat,
-  planBalance,
   reportsToName,
   type Assignment,
 } from "../lib/orbit";
@@ -235,7 +235,7 @@ export function AgentOrbit({ hero = false }: { hero?: boolean }) {
             type="button"
             className="primary"
             disabled={unowned.length === 0}
-            onClick={() => setPanel({ kind: "plan", plan: planBalance(unowned, load) })}
+            onClick={() => setPanel({ kind: "plan", plan: planSmartBalance(unowned, Object.fromEntries(load.map((row) => [row.personId, row.count])), TEAM, new Set([...data.people.map((person) => person.id), ...ORG.map((seat) => seat.id)])) })}
           >
             Auto-balance
           </button>
