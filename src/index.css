@@ -1231,3 +1231,6 @@ input, select, textarea { min-height: var(--control); }
   .tl-actions:empty { display: none; }
   .tl-actions button { flex: 1; }
 }
+
+.su-del { margin-left: auto; display: inline-flex; gap: 6px; }
+.su-del button, button.su-del { min-height: 30px; padding: 3px 12px; font-size: 13px; }

@@ -24,6 +24,7 @@ export function StandupsPanel() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const roster = useMemo(
     () => hq.data.people.map((person) => ({ id: person.id, name: orgSeat(person.id)?.name ?? person.name })),
@@ -175,6 +176,16 @@ export function StandupsPanel() {
               <header>
                 <b>{formatDay(entry.date)}</b>
                 <span className="meta">{author(entry.authorId)}{entry.taskCount ? ` · ${entry.taskCount} ${entry.taskCount === 1 ? "task" : "tasks"}` : ""}</span>
+                {hq.isAdmin ? (
+                  confirmId === entry.id ? (
+                    <span className="su-del">
+                      <button type="button" className="warn" onClick={() => void hq.deleteStandup(entry.id).then(() => setConfirmId(null)).catch(() => undefined)}>Yes, delete it</button>
+                      <button type="button" className="ghost" onClick={() => setConfirmId(null)}>Keep it</button>
+                    </span>
+                  ) : (
+                    <button type="button" className="ghost su-del" onClick={() => setConfirmId(entry.id)}>Delete</button>
+                  )
+                ) : null}
               </header>
               <p className={open ? "su-text" : "su-text clamp"}>{entry.summary}</p>
               {entry.summary.length > 280 ? (

@@ -67,7 +67,7 @@ export function QuickAssign({ today, defaultOwner = "" }: { today: string; defau
         void hq
           .saveTask(task, ownerId === "unassigned" ? "Added with no owner" : `Assigned to ${ownerLabel(ownerId, groups)}`)
           .then(() => {
-            setSaved(`Assigned to ${ownerLabel(ownerId, groups)}`);
+            setSaved(ownerId === "unassigned" ? "Added with no owner. It is at the top of the list." : `Assigned to ${ownerLabel(ownerId, groups)}.`);
             setTitle("");
             titleRef.current?.focus();
             window.setTimeout(() => setSaved(""), 2500);
@@ -126,6 +126,14 @@ export function TaskList({
   const [toast, setToast] = useState<Toast | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
+  const flashTimer = useRef<number | undefined>(undefined);
+
+  function flashRow(id: string) {
+    window.clearTimeout(flashTimer.current);
+    setFlash(null);
+    window.requestAnimationFrame(() => setFlash(id));
+    flashTimer.current = window.setTimeout(() => setFlash(null), 2200);
+  }
 
   function say(next: Toast) {
     window.clearTimeout(toastTimer.current);
@@ -140,8 +148,7 @@ export function TaskList({
       return;
     }
     row.scrollIntoView({ behavior: "smooth", block: "center" });
-    setFlash(id);
-    window.setTimeout(() => setFlash(null), 2200);
+    flashRow(id);
   }
 
   async function save(task: Task, draft: Draft) {
@@ -180,8 +187,7 @@ export function TaskList({
       window.setTimeout(() => {
         const row = document.querySelector(`[data-task="${task.id}"]`);
         if (row) {
-          setFlash(task.id);
-          window.setTimeout(() => setFlash(null), 2200);
+          flashRow(task.id);
         }
       }, 80);
     } catch {
@@ -243,7 +249,7 @@ export function TaskList({
                       say({
                         text: done ? `Marked done: ${task.title}. It is under Done this week.` : `Reopened: ${task.title}.`,
                         taskId: task.id,
-                        undo: () => void hq.setTaskStatus({ ...task, status: done ? "done" : "open" }, done ? "open" : "done").catch(() => undefined),
+                        undo: () => void (done ? hq.placeTask({ ...task, status: "done" }, taskLane(task)) : hq.setTaskStatus({ ...task, status: "open" }, "done")).catch(() => undefined),
                       }),
                     )
                     .catch(() => undefined);
