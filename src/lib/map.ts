@@ -287,7 +287,7 @@ export function mapHistory(id: string, taskId: string, raw: unknown): TaskHistor
 export function loadSeed(): DashboardData {
   const data = readDashboard(seedJson);
   if (
-    data.people.length !== 9 ||
+    data.people.length !== 10 ||
     data.tasks.length !== 10 ||
     data.agents.length !== 18 ||
     data.brands.length !== 4 ||
