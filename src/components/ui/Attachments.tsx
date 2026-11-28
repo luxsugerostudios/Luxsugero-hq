@@ -1,38 +1,13 @@
 import { useState } from "react";
 import { useHqContext } from "../../lib/hq";
 import type { Attachment } from "../../lib/types";
+import { cleanUrl, guessName } from "../../lib/links";
+
+export { cleanUrl, guessName };
 
 export type LinkDraft = { name: string; url: string };
 
 const DRIVE = "https://drive.google.com/drive/my-drive";
-
-export function cleanUrl(raw: string): string | null {
-  const value = raw.trim();
-  if (!value) return null;
-  const withScheme = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-  try {
-    const url = new URL(withScheme);
-    if (url.protocol !== "https:") return null;
-    return url.toString();
-  } catch {
-    return null;
-  }
-}
-
-export function guessName(url: string): string {
-  try {
-    const u = new URL(url);
-    if (/docs\.google\.com/.test(u.host)) {
-      const kind = u.pathname.split("/")[1];
-      return kind === "spreadsheets" ? "Google Sheet" : kind === "presentation" ? "Google Slides" : kind === "forms" ? "Google Form" : "Google Doc";
-    }
-    if (/drive\.google\.com/.test(u.host)) return "Drive file";
-    const last = decodeURIComponent(u.pathname.split("/").filter(Boolean).pop() ?? "");
-    return last || u.host;
-  } catch {
-    return "Link";
-  }
-}
 
 function icon(url: string): string {
   if (/spreadsheets/.test(url)) return "▦";
